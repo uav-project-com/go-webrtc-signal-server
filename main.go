@@ -1,12 +1,25 @@
 package main
 
 import (
-	"go-rest-api/models"
+	"go-rest-api/config"
+	"go-rest-api/controllers"
+	"go-rest-api/repo"
 	"go-rest-api/routes"
+	"go-rest-api/service"
+	"log"
 )
 
 func main() {
-    models.ConnectDatabase()
-    r := routes.SetupRouter()
-    r.Run()
+	config.ConnectDatabase()
+	// Initialize repository, service, and controller
+	productRepo := repo.NewProductRepository(config.DB)
+	productService := service.NewProductService(productRepo)
+	productController := controllers.NewProductController(productService)
+
+	r := routes.NewRoute(productController)
+	err := r.Run()
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
 }

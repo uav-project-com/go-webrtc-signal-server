@@ -1,24 +1,24 @@
 package routes
 
 import (
-	"go-rest-api/controllers"
+	api "go-rest-api/controllers"
 	"go-rest-api/middlewares"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter() *gin.Engine {
-    r := gin.Default()
+func NewRoute(productApi *api.ProductController) *gin.Engine {
+	r := gin.Default()
 
 	// Register the IPLogger middleware
-    r.Use(middlewares.IPLogger())
+	r.Use(middlewares.IPLogger())
 
-
-    r.GET("/products", controllers.FindProducts)
-    r.POST("/products", controllers.CreateProduct)
-    r.GET("/products/:id", controllers.FindProduct)
-    r.PUT("/products/:id", controllers.UpdateProduct)
-    r.DELETE("/products/:id", controllers.DeleteProduct)
-
-    return r
+	r.GET("/products", productApi.FindProducts)
+	r.POST("/products", api.CreateProduct)
+	r.GET("/products/:id", api.FindProduct)
+	r.PUT("/products/:id", api.UpdateProduct)
+	r.DELETE("/products/:id", api.DeleteProduct)
+	// webrtc
+	r.POST("/webrtc/sdp/m/:meetingId/c/:userID/p/:peerId/s/:isSender")
+	return r
 }
