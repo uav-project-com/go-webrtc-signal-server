@@ -19,7 +19,7 @@ func NewProductController(svc service.ProductService) *ProductController {
 	return &ProductController{productService: svc}
 }
 
-func (api *ProductController) FindProducts(c *gin.Context) {
+func (api *ProductController) FindProductsHandler(c *gin.Context) {
 	var products = api.productService.FindAll()
 	utils.RespondJSON(c, http.StatusOK, products)
 }

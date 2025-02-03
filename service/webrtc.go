@@ -19,13 +19,13 @@ const (
 )
 
 type VideoCallService interface {
-	CallBroadCast(*gin.Context, dto.PeerInfo)
+	CallBroadcast(*gin.Context, dto.PeerInfo)
 }
 
 type videoCallService struct {
 }
 
-func (v *videoCallService) CallBroadCast(c *gin.Context, callInfo dto.PeerInfo) {
+func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) {
 	var session config.Sdp // body => into new api is body's session field
 	if err := c.ShouldBindJSON(&session); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

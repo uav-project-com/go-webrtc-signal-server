@@ -16,7 +16,10 @@ func main() {
 	productService := service.NewProductService(productRepo)
 	productController := controllers.NewProductController(productService)
 
-	r := routes.NewRoute(productController)
+	videoCallService := service.NewVideoCallService()
+	videoController := controllers.NewWebRtcController(videoCallService)
+
+	r := routes.NewRoute(productController, videoController)
 	err := r.Run()
 	if err != nil {
 		log.Fatal(err)
