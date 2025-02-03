@@ -15,7 +15,6 @@ export class CallComponent implements OnInit {
   meetingId: string
   peerID: string
   userId: string
-  URL = "/api/v1/webrtc/start-call"
 
   constructor(private http: HttpClient, private route: ActivatedRoute) {
   }
@@ -32,34 +31,17 @@ export class CallComponent implements OnInit {
     this.pcSender = new RTCPeerConnection({
       iceServers: [
         {urls: "stun:stun.l.google.com:19302"},
-        {urls: "stun:stun.l.google.com:5349"},
-        {urls: "stun:stun1.l.google.com:3478"},
-        {urls: "stun:stun1.l.google.com:5349"},
-        {urls: "stun:stun2.l.google.com:19302"},
-        {urls: "stun:stun2.l.google.com:5349"},
-        {urls: "stun:stun3.l.google.com:3478"},
-        {urls: "stun:stun3.l.google.com:5349"},
-        {urls: "stun:stun4.l.google.com:19302"},
-        {urls: "stun:stun4.l.google.com:5349"}
       ]
     })
     this.pcReceiver = new RTCPeerConnection({
       iceServers: [
         {urls: "stun:stun.l.google.com:19302"},
-        {urls: "stun:stun.l.google.com:5349"},
-        {urls: "stun:stun1.l.google.com:3478"},
-        {urls: "stun:stun1.l.google.com:5349"},
-        {urls: "stun:stun2.l.google.com:19302"},
-        {urls: "stun:stun2.l.google.com:5349"},
-        {urls: "stun:stun3.l.google.com:3478"},
-        {urls: "stun:stun3.l.google.com:5349"},
-        {urls: "stun:stun4.l.google.com:19302"},
-        {urls: "stun:stun4.l.google.com:5349"}
       ]
     })
 
     this.pcSender.onicecandidate = (event: { candidate: null; }) => {
       if (event.candidate === null) {
+        console.log(new Date() + " sender http.post")
         this.http.post<Sdp>('http://127.0.0.1:8080/webrtc/sdp/m/' + this.meetingId + "/c/" + this.userId + "/p/" + this.peerID + "/s/" + true,
           {"sdp": btoa(JSON.stringify(this.pcSender.localDescription))}).subscribe(response => {
           this.pcSender.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(response.Sdp))))
@@ -68,6 +50,7 @@ export class CallComponent implements OnInit {
     }
     this.pcReceiver.onicecandidate = (event: { candidate: null; }) => {
       if (event.candidate === null) {
+        console.log(new Date() + " receiver http.post")
         this.http.post<Sdp>('http://127.0.0.1:8080/webrtc/sdp/m/' + this.meetingId + "/c/" + this.userId + "/p/" + this.peerID + "/s/" + false,
           {"sdp": btoa(JSON.stringify(this.pcReceiver.localDescription))}).subscribe(response => {
           this.pcReceiver.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(response.Sdp))))
@@ -78,19 +61,23 @@ export class CallComponent implements OnInit {
 
   startCall() {
     // sender part of the call
-    navigator.mediaDevices.getUserMedia({video: true, audio: true}).then((stream) => {
-      const senderVideo: any = document.getElementById('senderVideo');
-      senderVideo.srcObject = stream;
-      const tracks = stream.getTracks();
-      for (let i = 0; i < tracks.length; i++) {
-        this.pcSender.addTrack(stream.getTracks()[i]);
-      }
-      this.pcSender.createOffer().then(d => {
-        this.pcSender.setLocalDescription(d)
+    const isAlice = this.userId === "alice"
+    if (isAlice) {
+      navigator.mediaDevices.getUserMedia({video: true, audio: false}).then((stream) => {
+        const senderVideo: any = document.getElementById('senderVideo');
+        senderVideo.srcObject = stream;
+        const tracks = stream.getTracks();
+        for (let i = 0; i < tracks.length; i++) {
+          this.pcSender.addTrack(stream.getTracks()[i]);
+        }
+        this.pcSender.createOffer().then(d => {
+          this.pcSender.setLocalDescription(d)
+          console.log(new Date() + " pcSender.createOffer")
+        })
       })
-    })
+    }
     // you can use event listner so that you inform he is connected!
-    this.pcSender.addEventListener('connectionstatechange', event => {
+    this.pcSender.addEventListener('connectionstatechange', _event => {
       console.log("connectionstatechange-state:" + this.pcSender.connectionState)
       if (this.pcSender.connectionState === 'connected') {
         console.log("horray!")
@@ -103,6 +90,7 @@ export class CallComponent implements OnInit {
     this.pcReceiver.createOffer()
       .then((d: any) => {
         this.pcReceiver.setLocalDescription(d)
+        console.log(new Date() + " pcReceiver.createOffer")
       })
 
     this.pcReceiver.ontrack = function (event: { streams: any[]; }) {
