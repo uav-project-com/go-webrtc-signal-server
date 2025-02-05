@@ -10,6 +10,7 @@ import (
 )
 
 func main() {
+	config.LoadConfig("")
 	config.ConnectDatabase()
 	// Initialize repository, service, and controller
 	productRepo := repo.NewProductRepository(config.DB)
@@ -20,7 +21,9 @@ func main() {
 	videoController := controllers.NewWebRtcController(videoCallService)
 
 	r := routes.NewRoute(productController, videoController)
-	err := r.Run()
+	port := config.AppConfig.App.Port
+	log.Println("server run in: " + port)
+	err := r.Run(":" + port)
 	if err != nil {
 		log.Fatal(err)
 		return

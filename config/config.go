@@ -1,13 +1,13 @@
 package config
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/joho/godotenv"
 	"github.com/pion/webrtc/v2"
 )
 
@@ -27,12 +27,22 @@ func CorsMiddleware() gin.HandlerFunc {
 	}
 }
 
+type Database struct {
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Name     string `yaml:"name"`
+}
+
+type App struct {
+	Port string `yaml:"port"`
+}
+
 type Config struct {
-	DBUser            string
-	DBPassword        string
-	DBName            string
-	DBHost            string
-	DBPort            string
+	Database          Database `yaml:"database"`
+	App               App      `yaml:"app"`
+	stun              []string `yaml:"stun-urls"`
 	PeerConnectionMap map[string]chan *webrtc.Track
 	Api               *webrtc.API
 	IceConfig         *webrtc.Configuration
@@ -44,11 +54,26 @@ type Sdp struct {
 
 var AppConfig *Config
 
-func LoadConfig() {
-	// Load environment variables from .env file
-	err := godotenv.Load()
+// LoadConfig : default profile `dev` => app-dev.yaml
+func LoadConfig(resourceDir string) {
+	profile, have := os.LookupEnv("ENV")
+	if !have {
+		profile, have = os.LookupEnv("env")
+		if !have {
+			profile = "dev"
+		}
+	}
+	// Read the YAML file
+	// Use filepath.Join for OS-independent path construction
+	filePath := filepath.Join(resourceDir, "app-"+profile+".yaml")
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		fmt.Println("Error loading .env file")
+		log.Fatal(err)
+	}
+	// Parse the YAML file into the struct
+	err = yaml.Unmarshal(data, &AppConfig)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	media := webrtc.MediaEngine{}
@@ -58,26 +83,16 @@ func LoadConfig() {
 	media.RegisterCodec(webrtc.NewRTPVP8Codec(webrtc.DefaultPayloadTypeVP8, 90000))
 
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(media))
-	stunServers := getEnvs("STUN_URLS")
-	log.Println("STUN_URLS:", stunServers)
 	peerConnectionConfig := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
-				URLs: stunServers,
+				URLs: AppConfig.stun,
 			},
 		},
 	}
-
-	AppConfig = &Config{
-		DBUser:            getEnv("DB_USER", "postgres"),
-		DBPassword:        getEnv("DB_PASSWORD", "password"),
-		DBName:            getEnv("DB_NAME", "products_db"),
-		DBHost:            getEnv("DB_HOST", "localhost"),
-		DBPort:            getEnv("DB_PORT", "5432"),
-		PeerConnectionMap: make(map[string]chan *webrtc.Track), // sender to channel of track
-		Api:               api,
-		IceConfig:         &peerConnectionConfig,
-	}
+	AppConfig.IceConfig = &peerConnectionConfig
+	AppConfig.Api = api
+	AppConfig.PeerConnectionMap = make(map[string]chan *webrtc.Track) // sender to channel of track
 }
 
 func getEnv(key, fallback string) string {
@@ -89,7 +104,7 @@ func getEnv(key, fallback string) string {
 
 func getEnvs(key string) []string {
 	if value, exists := os.LookupEnv(key); exists {
-		return strings.Split(value, " ")
+		return strings.Split(value, ",")
 	}
 	return []string{}
 }
