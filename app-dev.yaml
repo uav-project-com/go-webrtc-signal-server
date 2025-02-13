@@ -1,9 +1,9 @@
 app:
-  port: 8081
+  port: 8080
 database:
-  host: "postgresql-191891-0.cloudclusters.net"
-  port: 10232
-  username: "test"
+  host: "localhost"
+  port: 5432
+  username: "postgres"
   password: "password"
   name: "h_engine"
 stun-urls:

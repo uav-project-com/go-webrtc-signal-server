@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v4"
 )
 
 func CorsMiddleware() gin.HandlerFunc {
@@ -40,12 +40,12 @@ type App struct {
 }
 
 type Config struct {
-	Database          Database `yaml:"database"`
-	App               App      `yaml:"app"`
-	stun              []string `yaml:"stun-urls"`
-	PeerConnectionMap map[string]chan *webrtc.Track
-	Api               *webrtc.API
-	IceConfig         *webrtc.Configuration
+	Database               Database `yaml:"database"`
+	App                    App      `yaml:"app"`
+	stun                   []string `yaml:"stun-urls"`
+	PeerConnectionMapLocal map[string]chan *webrtc.TrackLocal
+	Api                    *webrtc.API
+	IceConfig              *webrtc.Configuration
 }
 
 type Sdp struct {
@@ -80,9 +80,32 @@ func LoadConfig(resourceDir string) {
 
 	// Set up the codecs you want to use.
 	// Only support VP8(video compression), this makes our proxying code simpler
-	media.RegisterCodec(webrtc.NewRTPVP8Codec(webrtc.DefaultPayloadTypeVP8, 90000))
+	// Create a new MediaEngine
+	// Register the VP8 codec
+	if err := media.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{
+			MimeType:    "video/VP8",
+			ClockRate:   90000,
+			Channels:    0, // Video codecs have 0 channels
+			SDPFmtpLine: "",
+		},
+		PayloadType: 96, // Default payload type for VP8
+	}, webrtc.RTPCodecTypeVideo); err != nil {
+		log.Println("Error registering video:", err)
+		// Alternatively, register default codecs (including VP8)
+		if err := media.RegisterDefaultCodecs(); err != nil {
+			log.Fatal(err)
+		}
+	}
 
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(media))
+	// Alternatively, register default codecs (including VP8)
+	if err := media.RegisterDefaultCodecs(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Create a new API with the MediaEngine
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(&media))
+
 	peerConnectionConfig := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
@@ -92,7 +115,7 @@ func LoadConfig(resourceDir string) {
 	}
 	AppConfig.IceConfig = &peerConnectionConfig
 	AppConfig.Api = api
-	AppConfig.PeerConnectionMap = make(map[string]chan *webrtc.Track) // sender to channel of track
+	AppConfig.PeerConnectionMapLocal = make(map[string]chan *webrtc.TrackLocal) // sender to channel of track
 }
 
 func getEnv(key, fallback string) string {

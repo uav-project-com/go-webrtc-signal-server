@@ -1,4 +1,4 @@
-// Package signal contains helpers to exchange the SDP session
+// Package utils contains helpers to exchange the SDP session
 // description between examples.
 package utils
 
