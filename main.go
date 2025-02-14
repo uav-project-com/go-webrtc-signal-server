@@ -10,6 +10,12 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile) // Enable file:line logging
+	defer func() {                               // keep server live when panic error occurred
+		if err := recover(); err != nil {
+			log.Printf("Recovered from panic: %v", err)
+		}
+	}()
 	config.LoadConfig("")
 	config.ConnectDatabase()
 	// Initialize repository, service, and controller
