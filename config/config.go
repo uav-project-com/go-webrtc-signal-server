@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,12 +19,12 @@ func CorsMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
+		if c.Request.Method == http.MethodOptions {
+			c.Writer.WriteHeader(http.StatusNoContent) // Use `WriteHeader` instead of `AbortWithStatus`
 			return
 		}
 
-		c.Next()
+		c.Next() // Continue processing the request
 	}
 }
 
