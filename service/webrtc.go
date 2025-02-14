@@ -11,7 +11,6 @@ import (
 	"go-rest-api/utils"
 	"io"
 	"log"
-	"net/http"
 	"time"
 )
 
@@ -20,17 +19,17 @@ const (
 )
 
 type VideoCallService interface {
-	CallBroadcast(*gin.Context, dto.PeerInfo)
+	CallBroadcast(*gin.Context, dto.PeerInfo) (config.Sdp, error)
 }
 
 type videoCallService struct {
 }
 
-func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) {
+func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) (config.Sdp, error) {
 	var session config.Sdp // body => into new api is body's session field
 	if err := c.ShouldBindJSON(&session); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		log.Println("ShouldBindJSON", err)
+		return config.Sdp{}, err
 	}
 
 	offer := webrtc.SessionDescription{}
@@ -38,34 +37,42 @@ func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) 
 
 	// Create a new RTCPeerConnection
 	// this is the gist of webrtc, generates and process SDP
-	peerConnection, err := config.AppConfig.Api.NewPeerConnection(*config.AppConfig.IceConfig)
 	println("peerConnection - new")
+	peerConnection, err := config.AppConfig.Api.NewPeerConnection(*config.AppConfig.IceConfig)
+
 	if err != nil {
-		log.Fatal(err)
+		log.Println("NewPeerConnection error occurred", err)
 	}
 	if !callInfo.IsSender {
-		receiveTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.PeerId)
+		err = receiveTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.PeerId)
 	} else {
-		createTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.UserId)
+		err = createTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.UserId)
 	}
+	if err != nil {
+		log.Println("onTrack error", err)
+		return config.Sdp{}, err
+	}
+
 	// Set the SessionDescription of remote callInfo
 	err = peerConnection.SetRemoteDescription(offer)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("error occurred", err)
+		return config.Sdp{}, err
 	}
 
 	// Create answer
 	answer, err := peerConnection.CreateAnswer(nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("error occurred", err)
 	}
 
 	// Sets the LocalDescription, and starts our UDP listeners
 	err = peerConnection.SetLocalDescription(answer)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("error occurred", err)
+		return config.Sdp{}, err
 	}
-	c.JSON(http.StatusOK, config.Sdp{Sdp: utils.Encode(answer)})
+	return config.Sdp{Sdp: utils.Encode(answer)}, nil
 }
 
 func NewVideoCallService() VideoCallService {
@@ -77,27 +84,29 @@ func NewVideoCallService() VideoCallService {
 // if peer connects before user: channel would have been created by peer and track can be added by getting the channel from cache
 func receiveTrack(peerConnection *webrtc.PeerConnection,
 	peerConnectionMap map[string]chan *webrtc.TrackLocalStaticRTP,
-	peerID string) {
+	peerID string) error {
 	if _, ok := peerConnectionMap[peerID]; !ok {
 		peerConnectionMap[peerID] = make(chan *webrtc.TrackLocalStaticRTP, 1)
 	}
 	localTrack := <-peerConnectionMap[peerID]
 	_, err := peerConnection.AddTrack(localTrack)
 	if err != nil {
-		log.Println("error adding track", err)
-		return
+		log.Println("Error adding track", err)
+		return err
 	}
+	return nil
 }
 
 // user is the caller of the method
 // if user connects before peer: since user is first, user will create the channel and track and will pass the track to the channel
 // if peer connects before user: since peer came already, he created the channel and is listning and waiting for me to create and pass track
-func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]chan *webrtc.TrackLocalStaticRTP, currentUserID string) {
+func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]chan *webrtc.TrackLocalStaticRTP, currentUserID string) error {
 
 	if _, err := peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo); err != nil {
-		log.Fatal(err)
+		log.Println("Error occurred", err)
+		return err
 	}
-
+	var ticker *time.Ticker
 	// Set a handler for when a new remote track starts, this just distributes all our packets
 	// to connected peers
 	peerConnection.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
@@ -108,7 +117,7 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 		//	chỉ gửi PLI khi cần thiết (ví dụ, khi nhận được yêu cầu NACK hoặc PLI từ phía người xem).
 		//	Điều này giúp tiết kiệm băng thông và tài nguyên xử lý.
 		go func() {
-			ticker := time.NewTicker(rtcpPLIInterval)
+			ticker = time.NewTicker(rtcpPLIInterval)
 			for range ticker.C {
 				if rtcpSendErr := peerConnection.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(remoteTrack.SSRC())}}); rtcpSendErr != nil {
 					fmt.Println(rtcpSendErr)
@@ -124,11 +133,12 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 			"pion",                                 // Stream ID
 		)
 		if newTrackErr != nil {
-			log.Fatal(newTrackErr)
+			log.Println("Error occurred", newTrackErr)
+			return
 		}
 
 		// the channel that will have the local track that is used by the sender
-		// the localTrack needs to be fed to the reciever
+		// the localTrack needs to be fed to the receiver
 		localTrackChan := make(chan *webrtc.TrackLocalStaticRTP, 1)
 		localTrackChan <- localTrack
 		if existingChan, ok := pcMapLocal[currentUserID]; ok {
@@ -142,14 +152,28 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 		for { // for publisher only
 			i, _, readErr := remoteTrack.Read(rtpBuf)
 			if readErr != nil {
-				log.Fatal(readErr)
+				log.Println("Error occurred", readErr)
+				return // TODO maybe break instead of return?
 			}
 
 			// ErrClosedPipe means we don't have any subscribers, this is ok if no peers have connected yet
 			if _, err := localTrack.Write(rtpBuf[:i]); err != nil && !errors.Is(err, io.ErrClosedPipe) {
-				log.Fatal(err)
+				log.Println("Error occurred", err)
+				return // TODO maybe break instead of return?
 			}
 		}
 	})
-
+	peerConnection.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		// TODO: improve stop ticker khi tất cả user out?
+		log.Println("Connection state changed:", state)
+		if state == webrtc.PeerConnectionStateClosed ||
+			state == webrtc.PeerConnectionStateDisconnected ||
+			state == webrtc.PeerConnectionStateFailed {
+			log.Println("Stopping RTCP PLI sender due to disconnection")
+			if ticker != nil {
+				ticker.Stop() // Stop the PLI sender
+			}
+		}
+	})
+	return nil
 }
