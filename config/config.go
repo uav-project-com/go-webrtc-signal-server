@@ -43,7 +43,7 @@ type Config struct {
 	Database               Database `yaml:"database"`
 	App                    App      `yaml:"app"`
 	stun                   []string `yaml:"stun-urls"`
-	PeerConnectionMapLocal map[string]chan *webrtc.TrackLocal
+	PeerConnectionMapLocal map[string]chan *webrtc.TrackLocalStaticRTP
 	Api                    *webrtc.API
 	IceConfig              *webrtc.Configuration
 }
@@ -115,7 +115,7 @@ func LoadConfig(resourceDir string) {
 	}
 	AppConfig.IceConfig = &peerConnectionConfig
 	AppConfig.Api = api
-	AppConfig.PeerConnectionMapLocal = make(map[string]chan *webrtc.TrackLocal) // sender to channel of track
+	AppConfig.PeerConnectionMapLocal = make(map[string]chan *webrtc.TrackLocalStaticRTP) // sender to channel of track
 }
 
 func getEnv(key, fallback string) string {

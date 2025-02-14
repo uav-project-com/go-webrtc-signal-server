@@ -44,9 +44,9 @@ func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) 
 		log.Fatal(err)
 	}
 	if !callInfo.IsSender {
-		receiveTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.PeerId)
+		receiveTrack1(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.PeerId)
 	} else {
-		createTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.UserId)
+		createTrack1(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.UserId)
 	}
 	// Set the SessionDescription of remote callInfo
 	err = peerConnection.SetRemoteDescription(offer)
@@ -154,4 +154,64 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 		}
 	})
 
+}
+
+func receiveTrack1(peerConnection *webrtc.PeerConnection,
+	peerConnectionMap map[string]chan *webrtc.TrackLocalStaticRTP,
+	peerID string) {
+	if _, ok := peerConnectionMap[peerID]; !ok {
+		peerConnectionMap[peerID] = make(chan *webrtc.TrackLocalStaticRTP, 1)
+	}
+	localTrack := <-peerConnectionMap[peerID]
+	if _, err := peerConnection.AddTrack(localTrack); err != nil {
+		log.Println("Failed to add track:", err)
+	}
+}
+
+func createTrack1(peerConnection *webrtc.PeerConnection,
+	peerConnectionMap map[string]chan *webrtc.TrackLocalStaticRTP,
+	currentUserID string) {
+
+	if _, err := peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo); err != nil {
+		log.Fatal(err)
+	}
+
+	peerConnection.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		go func() {
+			ticker := time.NewTicker(rtcpPLIInterval)
+			for range ticker.C {
+				if rtcpSendErr := peerConnection.WriteRTCP([]rtcp.Packet{
+					&rtcp.PictureLossIndication{MediaSSRC: uint32(remoteTrack.SSRC())},
+				}); rtcpSendErr != nil {
+					fmt.Println(rtcpSendErr)
+				}
+			}
+		}()
+
+		localTrack, newTrackErr := webrtc.NewTrackLocalStaticRTP(remoteTrack.Codec().RTPCodecCapability, "video", "pion")
+		if newTrackErr != nil {
+			log.Fatal(newTrackErr)
+		}
+
+		localTrackChan := make(chan *webrtc.TrackLocalStaticRTP, 1)
+		localTrackChan <- localTrack
+
+		if existingChan, ok := peerConnectionMap[currentUserID]; ok {
+			existingChan <- localTrack
+		} else {
+			peerConnectionMap[currentUserID] = localTrackChan
+		}
+
+		rtpBuf := make([]byte, 1400)
+		for {
+			i, _, readErr := remoteTrack.Read(rtpBuf)
+			if readErr != nil {
+				log.Fatal(readErr)
+			}
+
+			if _, err := localTrack.Write(rtpBuf[:i]); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+				log.Fatal(err)
+			}
+		}
+	})
 }
