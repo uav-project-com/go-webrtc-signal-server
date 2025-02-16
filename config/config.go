@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"gopkg.in/yaml.v3"
 	"log"
 	"net/http"
@@ -28,12 +29,14 @@ func CorsMiddleware() gin.HandlerFunc {
 	}
 }
 
-type Database struct {
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Name     string `yaml:"name"`
+func EnableSocket() websocket.Upgrader {
+	// Upgrade is used to upgrade HTTP connections to WebSocket connections
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			// Allow all connections by default (for development purposes)
+			return true
+		},
+	}
 }
 
 type App struct {
@@ -41,7 +44,6 @@ type App struct {
 }
 
 type Config struct {
-	Database               Database `yaml:"database"`
 	App                    App      `yaml:"app"`
 	stun                   []string `yaml:"stun-urls"`
 	PeerConnectionMapLocal map[string]chan *webrtc.TrackLocalStaticRTP
