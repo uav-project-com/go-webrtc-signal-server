@@ -15,6 +15,8 @@
     <button class="send-button" (click)="sendMsg()">Send</button>
   </div>
   <div class="scrollable-container">
-    <p class="content">{{ receivedMessages }}</p> <!-- Display the message -->
+    <ul>
+      <li *ngFor="let msg of receivedMessages">{{ msg }}</li>
+    </ul>
   </div>
 </div>

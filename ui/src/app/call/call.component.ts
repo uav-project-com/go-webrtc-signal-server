@@ -51,6 +51,14 @@ export class CallComponent implements OnInit {
       console.log('Received:', event.data);
       this.receivedMessages.push('Peer: ' + event.data);
     };
+    // When pcReceiver gets a data channel
+    this.pcReceiver.ondatachannel = (event) => {
+      const receiveChannel = event.channel;
+      receiveChannel.onmessage = (e) => {
+        console.log('Received:', e.data);
+        this.receivedMessages.push('You: ' + e.data);
+      };
+    };
 
     this.pcSender.onicecandidate = (event: { candidate: null; }) => {
       if (event.candidate === null) {
