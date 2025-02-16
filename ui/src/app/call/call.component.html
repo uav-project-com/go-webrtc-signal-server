@@ -8,4 +8,12 @@
   <div class="layer2">
     <video autoplay controls height="120" id="receiverVideo" muted width="160"></video>
   </div>
+  <br/>
+  <hr/>
+  <div class="container_msg">
+    <textarea [(ngModel)]="message" rows="4" placeholder="Type your message here..."></textarea>
+    <button class="send-button" (click)="sendMsg()">Send</button>
+  </div>
+  <p>Your message: {{ message }}</p> <!-- Display the message -->
+  <p>Peer message: {{ received }}</p> <!-- Display the message -->
 </div>

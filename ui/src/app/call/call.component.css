@@ -8,3 +8,25 @@
   margin-top: 100px;
   position: relative;
 }
+
+.container_msg {
+  position: relative;
+  width: 300px;
+}
+textarea {
+  width: 100%;
+  padding-right: 40px; /* Make space for the button */
+  box-sizing: border-box;
+}
+.send-button {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+  border-radius: 5px;
+}
