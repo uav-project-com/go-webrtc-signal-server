@@ -14,6 +14,7 @@
     <textarea [(ngModel)]="message" rows="4" placeholder="Type your message here..."></textarea>
     <button class="send-button" (click)="sendMsg()">Send</button>
   </div>
-  <p>Your message: {{ message }}</p> <!-- Display the message -->
-  <p>Peer message: {{ received }}</p> <!-- Display the message -->
+  <div class="scrollable-container">
+    <p class="content">{{ receivedMessages }}</p> <!-- Display the message -->
+  </div>
 </div>

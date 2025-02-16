@@ -13,11 +13,13 @@
   position: relative;
   width: 300px;
 }
+
 textarea {
   width: 100%;
   padding-right: 40px; /* Make space for the button */
   box-sizing: border-box;
 }
+
 .send-button {
   position: absolute;
   top: 50%;
@@ -29,4 +31,16 @@ textarea {
   padding: 10px;
   cursor: pointer;
   border-radius: 5px;
+}
+
+.scrollable-container {
+  width: 300px; /* Width of the scrollable container */
+  height: 200px; /* Height of the scrollable container */
+  overflow: auto; /* Enables scrolling if content exceeds the div */
+  border: 1px solid #ccc; /* Optional border */
+  padding: 10px; /* Optional padding for content inside */
+}
+
+.content {
+  height: 500px; /* A large height to ensure content overflows */
 }

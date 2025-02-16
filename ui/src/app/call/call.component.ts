@@ -18,8 +18,8 @@ export class CallComponent implements OnInit {
   meetingId: string
   peerID: string
   userId: string
-  message: string;
-  received: string;
+  message: string
+  receivedMessages: string[] = [];
 
   constructor(private http: HttpClient, private route: ActivatedRoute) {
   }
@@ -49,7 +49,7 @@ export class CallComponent implements OnInit {
     this.dataChannel.onopen = () => console.log('Data channel open');
     this.dataChannel.onmessage = (event) => {
       console.log('Received:', event.data);
-      this.received = event.data
+      this.receivedMessages.push('Peer: ' + event.data);
     };
 
     this.pcSender.onicecandidate = (event: { candidate: null; }) => {
@@ -118,6 +118,11 @@ export class CallComponent implements OnInit {
   }
 
   sendMsg() {
-    console.log('Sending: ' + this.message)
+    if (this.dataChannel.readyState === 'open') {
+      console.log('Sending: ' + this.message)
+      this.dataChannel.send(this.message);
+      this.receivedMessages.push('You: ' + this.message);
+      this.message = '';
+    }
   }
 }
