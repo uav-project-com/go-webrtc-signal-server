@@ -3,6 +3,7 @@ import {HttpClient} from '@angular/common/http';
 import {Sdp} from './Sdp';
 import {ActivatedRoute} from '@angular/router';
 import {FormsModule} from '@angular/forms';
+import { ChangeDetectorRef } from '@angular/core';
 
 @Component({
   selector: 'app-call',
@@ -14,14 +15,16 @@ export class CallComponent implements OnInit {
 
   pcSender: any
   pcReceiver: any
-  dataChannel!: RTCDataChannel;
+  private dataSender: RTCPeerConnection;
+  private dataReceiver: RTCPeerConnection;
+  private dataChannel: RTCDataChannel | null = null;
   meetingId: string
   peerID: string
   userId: string
   message: string
   receivedMessages: string[] = [];
 
-  constructor(private http: HttpClient, private route: ActivatedRoute) {
+  constructor(private http: HttpClient, private route: ActivatedRoute, private cdr: ChangeDetectorRef) {
   }
 
 
@@ -33,58 +36,26 @@ export class CallComponent implements OnInit {
     this.peerID = this.route.snapshot.paramMap.get('peerID');
     this.userId = this.route.snapshot.paramMap.get('userId')
 
-    this.pcSender = new RTCPeerConnection({
-      iceServers: [
-        {urls: 'stun:stun.l.google.com:19302'},
-      ]
-    })
-    this.pcReceiver = new RTCPeerConnection({
-      iceServers: [
-        {urls: 'stun:stun.l.google.com:19302'},
-      ]
-    })
+    const config: RTCConfiguration = {
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    };
+
+    this.pcSender = new RTCPeerConnection(config)
+    this.pcReceiver = new RTCPeerConnection(config)
+    // Data Peer Connections
+    this.dataSender = new RTCPeerConnection(config);
+    this.dataReceiver = new RTCPeerConnection(config);
 
     // create data channel
-    this.dataChannel = this.pcSender.createDataChannel('chat')
-    this.dataChannel.onopen = () => console.log('Data channel open');
-    this.dataChannel.onmessage = (event) => {
-      console.log('Received:', event.data);
-      this.receivedMessages.push('Peer: ' + event.data);
-    };
-    // When pcReceiver gets a data channel
-    this.pcReceiver.ondatachannel = (event) => {
-      const receiveChannel = event.channel;
-      receiveChannel.onmessage = (e) => {
-        console.log('Received:', e.data);
-        this.receivedMessages.push('You: ' + e.data);
-      };
-    };
-
-    this.pcSender.onicecandidate = (event: { candidate: null; }) => {
-      if (event.candidate === null) {
-        console.log(new Date() + ' sender http.post')
-        this.http.post<Sdp>('http://127.0.0.1:8080/webrtc/sdp/m/'
-          + this.meetingId + '/c/' + this.userId + '/p/' + this.peerID + '/s/' + true,
-          {sdp: btoa(JSON.stringify(this.pcSender.localDescription))}).subscribe(response => {
-          this.pcSender.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(response.Sdp))))
-        });
-      }
-    }
-    this.pcReceiver.onicecandidate = (event: { candidate: null; }) => {
-      if (event.candidate === null) {
-        console.log(new Date() + ' receiver http.post')
-        this.http.post<Sdp>('http://127.0.0.1:8080/webrtc/sdp/m/'
-          + this.meetingId + '/c/' + this.userId + '/p/' + this.peerID + '/s/' + false,
-          {sdp: btoa(JSON.stringify(this.pcReceiver.localDescription))}).subscribe(response => {
-          this.pcReceiver.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(response.Sdp))))
-        })
-      }
-    }
+    this.setupDataConnections();
+    // setup video connection
+    this.setupVideoConnections();
   }
 
   startCall() {
+    this.startDataChannel().then(() => {})
     // sender part of the call
-    const isAlice = this.userId === 'alice'
+    const isAlice = this.userId === 'alice' || true
     if (isAlice) {
       navigator.mediaDevices.getUserMedia({video: true, audio: false}).then((stream) => {
         const senderVideo: any = document.getElementById('senderVideo');
@@ -125,12 +96,78 @@ export class CallComponent implements OnInit {
 
   }
 
-  sendMsg() {
+  async sendMsg() {
     if (this.dataChannel.readyState === 'open') {
       console.log('Sending: ' + this.message)
       this.dataChannel.send(this.message);
       this.receivedMessages.push('You: ' + this.message);
       this.message = '';
+      // Manually trigger change detection
+      this.cdr.detectChanges();
     }
+  }
+
+  private setupVideoConnections() {
+    this.pcSender.onicecandidate = (event: { candidate: null; }) => {
+      if (event.candidate === null) {
+        console.log(new Date() + ' sender http.post')
+        this.http.post<Sdp>('http://127.0.0.1:8080/webrtc/sdp/m/'
+          + this.meetingId + '/c/' + this.userId + '/p/' + this.peerID + '/s/' + true,
+          {sdp: btoa(JSON.stringify(this.pcSender.localDescription))}).subscribe(response => {
+          this.pcSender.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(response.Sdp))))
+        });
+      }
+    }
+    this.pcReceiver.onicecandidate = (event: { candidate: null; }) => {
+      if (event.candidate === null) {
+        console.log(new Date() + ' receiver http.post')
+        this.http.post<Sdp>('http://127.0.0.1:8080/webrtc/sdp/m/'
+          + this.meetingId + '/c/' + this.userId + '/p/' + this.peerID + '/s/' + false,
+          {sdp: btoa(JSON.stringify(this.pcReceiver.localDescription))}).subscribe(response => {
+          this.pcReceiver.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(response.Sdp))))
+        })
+      }
+    }
+  }
+
+  private setupDataConnections() {
+    this.dataChannel = this.dataSender.createDataChannel("chat");
+
+    this.dataChannel.onopen = () => console.log("Data channel opened!");
+    this.dataChannel.onmessage = (event) => {
+      console.log("Received message:", event.data)
+      this.receivedMessages.push("Peer1: " + event.data)
+      this.cdr.detectChanges()
+    }
+
+    this.dataSender.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.dataReceiver.addIceCandidate(event.candidate).then(() => {});
+      }
+    };
+
+    this.dataReceiver.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.dataSender.addIceCandidate(event.candidate).then(() => {});
+      }
+    };
+
+    this.dataReceiver.ondatachannel = (event) => {
+      event.channel.onmessage = (messageEvent) => {
+        console.log("Received message:", messageEvent.data)
+        this.receivedMessages.push("Peer2: " + messageEvent.data)
+        this.cdr.detectChanges()
+      }
+    }
+  }
+
+  async startDataChannel() {
+    const offer = await this.dataSender.createOffer();
+    await this.dataSender.setLocalDescription(offer);
+    await this.dataReceiver.setRemoteDescription(offer);
+
+    const answer = await this.dataReceiver.createAnswer();
+    await this.dataReceiver.setLocalDescription(answer);
+    await this.dataSender.setRemoteDescription(answer);
   }
 }
