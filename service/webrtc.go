@@ -64,9 +64,9 @@ func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) 
 	//})
 
 	if !callInfo.IsSender {
-		err = receiveTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.PeerId)
+		err = receiveTrack(peerConnection, config.AppConfig.PeerConnectionMap, callInfo.PeerId)
 	} else {
-		err = createTrack(peerConnection, config.AppConfig.PeerConnectionMapLocal, callInfo.UserId)
+		err = createTrack(peerConnection, config.AppConfig.PeerConnectionMap, callInfo.UserId)
 	}
 	if err != nil {
 		log.Println("onTrack error", err)

@@ -15,8 +15,6 @@ export class CallComponent implements OnInit {
 
   pcSender: any
   pcReceiver: any
-  private dataSender: RTCPeerConnection;
-  private dataReceiver: RTCPeerConnection;
   private dataChannel: RTCDataChannel | null = null;
   meetingId: string
   peerID: string
@@ -42,9 +40,6 @@ export class CallComponent implements OnInit {
 
     this.pcSender = new RTCPeerConnection(config)
     this.pcReceiver = new RTCPeerConnection(config)
-    // Data Peer Connections
-    this.dataSender = new RTCPeerConnection(config);
-    this.dataReceiver = new RTCPeerConnection(config);
 
     // create data channel
     this.setupDataConnections();
@@ -53,23 +48,19 @@ export class CallComponent implements OnInit {
   }
 
   startCall() {
-    this.startDataChannel().then(() => {})
     // sender part of the call
-    const isAlice = this.userId === 'alice' || true
-    if (isAlice) {
-      navigator.mediaDevices.getUserMedia({video: true, audio: false}).then((stream) => {
-        const senderVideo: any = document.getElementById('senderVideo');
-        senderVideo.srcObject = stream;
-        const tracks = stream.getTracks();
-        for (let i = 0; i < tracks.length; i++) {
-          this.pcSender.addTrack(stream.getTracks()[i]);
-        }
-        this.pcSender.createOffer().then(d => {
-          this.pcSender.setLocalDescription(d)
-          console.log(new Date() + ' pcSender.createOffer')
-        })
+    navigator.mediaDevices.getUserMedia({video: true, audio: false}).then((stream) => {
+      const senderVideo: any = document.getElementById('senderVideo');
+      senderVideo.srcObject = stream;
+      const tracks = stream.getTracks();
+      for (let i = 0; i < tracks.length; i++) {
+        this.pcSender.addTrack(stream.getTracks()[i]);
+      }
+      this.pcSender.createOffer().then(d => {
+        this.pcSender.setLocalDescription(d)
+        console.log(new Date() + ' pcSender.createOffer')
       })
-    }
+    })
     // you can use event listner so that you inform he is connected!
     this.pcSender.addEventListener('connectionstatechange', _event => {
       console.log('connectionstatechange-state:' + this.pcSender.connectionState)
@@ -131,43 +122,21 @@ export class CallComponent implements OnInit {
   }
 
   private setupDataConnections() {
-    this.dataChannel = this.dataSender.createDataChannel("chat");
+    this.dataChannel = this.pcSender.createDataChannel('chat');
 
-    this.dataChannel.onopen = () => console.log("Data channel opened!");
+    this.dataChannel.onopen = () => console.log('Data channel opened!');
     this.dataChannel.onmessage = (event) => {
-      console.log("Received message:", event.data)
-      this.receivedMessages.push("Peer1: " + event.data)
+      console.log('Received message1:', event.data)
+      this.receivedMessages.push('Peer1: ' + event.data)
       this.cdr.detectChanges()
     }
 
-    this.dataSender.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.dataReceiver.addIceCandidate(event.candidate).then(() => {});
-      }
-    };
-
-    this.dataReceiver.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.dataSender.addIceCandidate(event.candidate).then(() => {});
-      }
-    };
-
-    this.dataReceiver.ondatachannel = (event) => {
+    this.pcReceiver.ondatachannel = (event) => {
       event.channel.onmessage = (messageEvent) => {
-        console.log("Received message:", messageEvent.data)
-        this.receivedMessages.push("Peer2: " + messageEvent.data)
+        console.log('Received message2:', messageEvent.data)
+        this.receivedMessages.push('Peer2: ' + messageEvent.data)
         this.cdr.detectChanges()
       }
     }
-  }
-
-  async startDataChannel() {
-    const offer = await this.dataSender.createOffer();
-    await this.dataSender.setLocalDescription(offer);
-    await this.dataReceiver.setRemoteDescription(offer);
-
-    const answer = await this.dataReceiver.createAnswer();
-    await this.dataReceiver.setLocalDescription(answer);
-    await this.dataSender.setRemoteDescription(answer);
   }
 }
