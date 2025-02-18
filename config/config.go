@@ -1,15 +1,16 @@
 package config
 
 import (
-	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
+	"gopkg.in/yaml.v3"
 )
 
 func CorsMiddleware() gin.HandlerFunc {
@@ -25,6 +26,16 @@ func CorsMiddleware() gin.HandlerFunc {
 		}
 
 		c.Next() // Continue processing the request
+	}
+}
+
+func EnableSocket() websocket.Upgrader {
+	// Upgrade is used to upgrade HTTP connections to WebSocket connections
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			// Allow all connections by default (for development purposes)
+			return true
+		},
 	}
 }
 

@@ -548,3 +548,91 @@ Nếu **WebRTC chỉ chạy trên trình duyệt (client-side)** và WebSocket c
 - Nếu bạn muốn **tận dụng ưu điểm của cả hai**, kết hợp HTTP + WebSocket là lựa chọn tốt nhất.  
 
 ⏩ **Tóm lại**: HTTP phù hợp cho trao đổi SDP ban đầu, còn WebSocket tối ưu cho ICE Candidates để đạt kết nối nhanh hơn. 🚀
+
+---
+> khi dùng websocket làm signaling server, có cần ngắt kết nối socket (close socket) sau khi kết nối webrtc thành công, nhằm tối ưu resource signal server không?
+
+### 📌 **Có nên đóng kết nối WebSocket sau khi WebRTC kết nối thành công?**
+
+**Câu trả lời là: Tùy vào mục đích của ứng dụng.**
+
+### 🚀 **Trường hợp nên đóng WebSocket (Close socket)**
+Nếu WebSocket **chỉ được dùng cho signaling ban đầu** (trao đổi SDP/ICE Candidate) thì:
+- Khi WebRTC **đã kết nối P2P thành công**, WebSocket **không còn cần thiết**.
+- Đóng WebSocket giúp **giảm tài nguyên server**, đặc biệt nếu có nhiều người dùng.
+- Nếu cần **ICE Restart** (kết nối lại khi mất mạng), có thể mở lại WebSocket khi cần.
+
+⏩ **Khi nên đóng WebSocket?**
+- Ứng dụng chỉ dùng WebSocket để trao đổi SDP + ICE.
+- Không có nhu cầu gửi tin nhắn hoặc điều khiển sau khi WebRTC kết nối.
+- Muốn tối ưu tài nguyên server.
+
+---
+
+### 🔄 **Trường hợp nên giữ WebSocket mở**
+Nếu WebSocket không chỉ dùng cho signaling mà còn có **các chức năng khác** (ví dụ: chat, điều khiển dữ liệu, thông báo), thì **giữ WebSocket mở** là cần thiết.
+
+📌 **Khi nên giữ WebSocket?**
+- Cần gửi **tin nhắn điều khiển** giữa các peer (ví dụ: mute/unmute, kick user).
+- Cần **quản lý trạng thái** của peer (ví dụ: thông báo khi peer rời cuộc gọi).
+- Dùng WebSocket như một **fallback mechanism** để reconnect nếu WebRTC mất kết nối.
+
+⏩ **Ví dụ thực tế**:
+- **Google Meet / Zoom**: WebSocket vẫn mở để chat, thông báo người tham gia.
+- **Ứng dụng IoT**: WebRTC truyền video, WebSocket dùng để điều khiển thiết bị.
+
+---
+
+### 🎯 **Tóm lại**
+| Trường hợp | Đóng WebSocket sau khi WebRTC kết nối? |
+|-----------|---------------------------------|
+| **Chỉ dùng WebSocket cho signaling** | ✅ Có thể đóng để tiết kiệm tài nguyên |
+| **WebSocket có chức năng khác (chat, điều khiển, quản lý trạng thái)** | ❌ Nên giữ mở để hỗ trợ tính năng |
+| **Ứng dụng cần ICE Restart nhanh** | ❌ Giữ mở để khôi phục kết nối nếu mất mạng |
+
+⏩ **Nếu chỉ dùng để signaling, có thể đóng. Nếu cần các tính năng khác, hãy giữ WebSocket mở!** 🚀
+
+---
+
+> tài nguyên mà server bị chiếm khi có 1 cặp peer keep websocket connection nhưng ở trạng thái chờ gửi/nhận message?
+
+### 📌 **Tài nguyên bị chiếm khi giữ WebSocket kết nối nhưng không gửi/nhận message**
+
+Nếu một **cặp peer giữ kết nối WebSocket nhưng không gửi/nhận message**, tài nguyên bị chiếm trên server bao gồm:
+
+1. **Bộ nhớ (RAM)**
+    - Mỗi WebSocket connection giữ một **socket descriptor** trong hệ điều hành.
+    - Có thể tiêu tốn khoảng **several KB (kilobytes) per connection**, tùy vào WebSocket server implementation.
+
+2. **CPU**
+    - Khi WebSocket **không có dữ liệu** được gửi, CPU usage gần như **bằng 0**.
+    - Nhưng nếu có nhiều kết nối, server vẫn phải **duy trì event loop** để quản lý WebSocket sessions.
+
+3. **File Descriptors (FDs)**
+    - Mỗi WebSocket mở chiếm một **file descriptor** trên hệ thống.
+    - Nếu số lượng kết nối lớn (hàng ngàn đến hàng triệu), server có thể đạt **giới hạn file descriptor** (ulimit).
+
+4. **Keep-Alive Traffic (Network Bandwidth)**
+    - WebSocket thường sử dụng **TCP keep-alive** để duy trì kết nối, chiếm một lượng nhỏ băng thông.
+    - Nếu không có keep-alive, NAT/firewall có thể đóng kết nối sau một khoảng thời gian.
+
+---
+
+### 🚀 **Tối ưu tài nguyên WebSocket trên server**
+Nếu có nhiều kết nối WebSocket, bạn có thể tối ưu tài nguyên bằng cách:
+- **Giới hạn thời gian timeout WebSocket idle** nếu không có tin nhắn trong X phút.
+- **Sử dụng load balancer hoặc WebSocket proxy** (ví dụ: Nginx, HAProxy) để chia tải.
+- **Dùng cơ chế WebSocket compression** để giảm overhead.
+
+---
+
+### 🎯 **Kết luận**
+| Tài nguyên | Mức độ ảnh hưởng khi WebSocket idle |
+|------------|--------------------------------|
+| **RAM** | 🟡 (vài KB mỗi kết nối) |
+| **CPU** | 🟢 (gần 0, trừ khi có quá nhiều kết nối) |
+| **File Descriptors** | 🔴 (giới hạn nếu có quá nhiều WebSockets) |
+| **Băng thông mạng** | 🟡 (nhỏ, chỉ ảnh hưởng nếu có quá nhiều keep-alive packets) |
+
+⏩ **Nếu chỉ có vài trăm WebSocket idle, tác động không đáng kể. Nếu có hàng trăm nghìn kết nối, cần tối ưu bằng load balancing hoặc timeout!** 🚀
+
