@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -29,7 +30,7 @@ func CorsMiddleware() gin.HandlerFunc {
 	}
 }
 
-func EnableSocket() websocket.Upgrader {
+func GetWebSocket() websocket.Upgrader {
 	// Upgrade is used to upgrade HTTP connections to WebSocket connections
 	return websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -37,6 +38,13 @@ func EnableSocket() websocket.Upgrader {
 			return true
 		},
 	}
+}
+
+// WebSocketConf Quản lý kết nối WebSocket của user
+type WebSocketConf struct {
+	Mutex   *sync.Mutex
+	RoomLst map[string]map[string]*websocket.Conn
+	Upgrade websocket.Upgrader
 }
 
 type Database struct {
@@ -58,6 +66,7 @@ type Config struct {
 	PeerConnectionMap map[string]chan *webrtc.TrackLocalStaticRTP
 	Api               *webrtc.API
 	IceConfig         *webrtc.Configuration
+	WebSock           *WebSocketConf
 }
 
 type Sdp struct {
@@ -128,6 +137,16 @@ func LoadConfig(resourceDir string) {
 	AppConfig.IceConfig = &peerConnectionConfig
 	AppConfig.Api = api
 	AppConfig.PeerConnectionMap = make(map[string]chan *webrtc.TrackLocalStaticRTP) // sender to channel of track
+
+	// config websocket
+	// Quản lý nhiều phòng chat
+	var roomClients = make(map[string]map[string]*websocket.Conn) // roomId -> (username -> WebSocket)
+	var mutex = &sync.Mutex{}                                     // Tránh race condition
+	AppConfig.WebSock = &WebSocketConf{
+		Mutex:   mutex,
+		RoomLst: roomClients,
+		Upgrade: GetWebSocket(),
+	}
 }
 
 func getEnv(key, fallback string) string {

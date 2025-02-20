@@ -1,11 +1,13 @@
 package service
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
+	"github.com/pkg/errors"
 	"go-rest-api/config"
 	"go-rest-api/dto"
 	"go-rest-api/utils"
@@ -20,9 +22,80 @@ const (
 
 type VideoCallService interface {
 	CallBroadcast(*gin.Context, dto.PeerInfo) (config.Sdp, error)
+	JoinRoom(*gin.Context, dto.JoinRequest) error
 }
 
 type videoCallService struct {
+}
+
+func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error {
+	ws := config.AppConfig.WebSock.Upgrade
+	mutex := config.AppConfig.WebSock.Mutex
+	rooms := config.AppConfig.WebSock.RoomLst
+
+	// Upgrade the HTTP connection to a WebSocket connection
+	conn, err := ws.Upgrade(ctx.Writer, ctx.Request, nil)
+	if err != nil {
+		log.Println("Failed to upgrade connection to WebSocket:", err)
+		return errors.Wrap(err, "Failed to upgrade connection to WebSocket")
+	}
+	defer func() {
+		// Handle the error from conn.Close()
+		if err := conn.Close(); err != nil {
+			log.Println("Failed to close WebSocket connection:", err)
+		}
+	}()
+	// Thêm user vào room - locking resource
+	mutex.Lock()
+	if _, exists := rooms[req.RoomID]; !exists {
+		// create new room!
+		rooms[req.RoomID] = make(map[string]*websocket.Conn)
+	}
+	// mapping UserID to new Room
+	rooms[req.RoomID][req.UserID] = conn
+	mutex.Unlock() // unlock resource
+	log.Printf("[%s] %s joined room %s\n", req.RoomID, req.UserID, req.RoomID)
+	defer func() {
+		// Xóa user khi mất kết nối
+		mutex.Lock()
+		delete(rooms[req.RoomID], req.UserID)
+		if len(rooms[req.RoomID]) == 0 {
+			delete(rooms, req.RoomID) // Xóa phòng nếu không còn user
+		}
+		mutex.Unlock()
+
+		err := conn.Close()
+		if err != nil {
+			log.Println("Failed to close WebSocket connection:", err)
+			return
+		}
+		log.Printf("[%s] %s left room %s\n", req.RoomID, req.UserID, req.RoomID)
+	}()
+	// Lắng nghe tin nhắn
+	for {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("Read error:", err)
+			break
+		}
+
+		// Giải mã JSON
+		var msg dto.Message
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Println("Invalid JSON:", err)
+			continue
+		}
+
+		msg.From = req.UserID
+		msg.RoomID = req.RoomID
+
+		// Phát tin nhắn trong phòng
+		err = broadcastToRoom(msg)
+		if err != nil {
+			log.Println("Broadcast error:", err)
+		}
+	}
+	return nil
 }
 
 func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) (config.Sdp, error) {
@@ -195,5 +268,36 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 			}
 		}
 	})
+	return nil
+}
+
+// Gửi tin nhắn đến tất cả user trong phòng
+func broadcastToRoom(msg dto.Message) error {
+	var conf = *config.AppConfig.WebSock
+	conf.Mutex.Lock()
+	connections, exists := conf.RoomLst[msg.RoomID]
+	conf.Mutex.Lock()
+
+	if !exists {
+		log.Printf("Room %s not found\n", msg.RoomID)
+		return errors.New(fmt.Sprintf("Room %s not found", msg.RoomID))
+	}
+
+	// Mã hóa tin nhắn thành JSON
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Println("JSON encoding error:", err)
+		return errors.New(fmt.Sprintf("JSON encoding error: %s", err))
+	}
+
+	// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
+	for user, conn := range connections {
+		if user != msg.From {
+			err := conn.WriteMessage(websocket.TextMessage, data)
+			if err != nil {
+				log.Printf("Failed to send message to %s: %v\n", user, err)
+			}
+		}
+	}
 	return nil
 }

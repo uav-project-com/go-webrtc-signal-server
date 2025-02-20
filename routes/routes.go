@@ -30,9 +30,13 @@ func NewRoute(productApi *api.ProductController, rtcApi *api.WebRtcController) *
 	r.DELETE("/products/:id", api.DeleteProduct)
 	// webrtc
 	r.POST("/webrtc/sdp/m/:meetingId/c/:userID/p/:peerID/s/:isSender", rtcApi.MakeVideoCallHandler)
-	// WebSocket endpoint
+
+	// Join room with websocket
+	r.GET("/ws/join/:roomId/c/:userId", rtcApi.WebSocketConnectHandler)
+
+	// WebSocket endpoint example
 	r.GET("/ws", func(c *gin.Context) {
-		websocket := config.EnableSocket()
+		websocket := config.GetWebSocket()
 
 		// Upgrade the HTTP connection to a WebSocket connection
 		conn, err := websocket.Upgrade(c.Writer, c.Request, nil)
@@ -47,7 +51,7 @@ func NewRoute(productApi *api.ProductController, rtcApi *api.WebRtcController) *
 			}
 		}()
 
-		// Handle WebSocket messages
+		// Handle WebSocket messages (infinity for loop with blocking function `conn.ReadMessage()`)
 		for {
 			// Read message from the client
 			messageType, message, err := conn.ReadMessage()
