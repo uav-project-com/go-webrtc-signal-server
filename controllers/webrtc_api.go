@@ -31,7 +31,8 @@ func (c *WebRtcController) WebSocketConnectHandler(ctx *gin.Context) {
 	}
 	err := c.videoCallService.JoinRoom(ctx, roomInfo)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, err)
+		log.Println("Error joining room:", err)
+		return
 	}
 	ctx.JSON(http.StatusOK, "Joined room:"+roomInfo.RoomID)
 }

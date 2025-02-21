@@ -50,6 +50,11 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 	if _, exists := rooms[req.RoomID]; !exists {
 		// create new room!
 		rooms[req.RoomID] = make(map[string]*websocket.Conn)
+	} else {
+		// validate user joined in this roomID
+		if _, exists := rooms[req.RoomID][req.UserID]; exists {
+			return errors.New(fmt.Sprintf("User %s already joined", req.UserID))
+		}
 	}
 	// mapping UserID to new Room
 	rooms[req.RoomID][req.UserID] = conn
