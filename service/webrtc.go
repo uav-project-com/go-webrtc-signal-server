@@ -92,10 +92,10 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 		} else {
 			log.Printf("Received: %v", msg)
 		}
-		// Phát tin nhắn trong phòng
-		err = broadcastToRoom(msg)
+		// Send message to other
+		err = sendMsg(msg, false)
 		if err != nil {
-			log.Println("Broadcast error:", err)
+			log.Println("Send msg error:", err)
 		}
 	}
 	return nil
@@ -275,7 +275,7 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 }
 
 // Gửi tin nhắn đến tất cả user trong phòng
-func broadcastToRoom(msg dto.Message) error {
+func sendMsg(msg dto.Message, broadcast bool) error {
 	var conf = *config.AppConfig.WebSock
 	conf.Mutex.Lock()
 	connections, exists := conf.RoomLst[msg.RoomID]
@@ -293,14 +293,35 @@ func broadcastToRoom(msg dto.Message) error {
 		return errors.New(fmt.Sprintf("JSON encoding error: %s", err))
 	}
 
-	// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
-	for user, conn := range connections {
-		if user != msg.From {
-			err := conn.WriteMessage(websocket.TextMessage, data)
-			if err != nil {
-				log.Printf("Failed to send message to %s: %v\n", user, err)
+	if broadcast {
+		// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
+		for user, conn := range connections {
+			if user != msg.From {
+				err := conn.WriteMessage(websocket.TextMessage, data)
+				if err != nil {
+					log.Printf("Failed to send message to %s: %v\n", user, err)
+				}
 			}
 		}
+	} else {
+		sent := false
+		// send to exactly userID
+		for user, conn := range connections {
+			if user == msg.To {
+				err := conn.WriteMessage(websocket.TextMessage, data)
+				if err != nil {
+					log.Printf("Failed to send message to %s: %v\n", user, err)
+				} else {
+					sent = true
+				}
+				break
+			}
+		}
+		if !sent {
+			log.Printf("Failed to send message to %s\n", msg.To)
+			return errors.New(fmt.Sprintf("Failed to send message to %s", msg.To))
+		}
 	}
+
 	return nil
 }
