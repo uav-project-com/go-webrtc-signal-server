@@ -13,6 +13,7 @@ import (
 	"go-rest-api/utils"
 	"io"
 	"log"
+	"net/http"
 	"time"
 )
 
@@ -93,7 +94,7 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 			log.Printf("Received: %v", msg)
 		}
 		// Send message to other
-		err = sendMsg(msg, false)
+		err = sendMsg(msg, conn, false)
 		if err != nil {
 			log.Println("Send msg error:", err)
 		}
@@ -275,7 +276,7 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 }
 
 // Gửi tin nhắn đến tất cả user trong phòng
-func sendMsg(msg dto.Message, broadcast bool) error {
+func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error {
 	var conf = *config.AppConfig.WebSock
 	conf.Mutex.Lock()
 	connections, exists := conf.RoomLst[msg.RoomID]
@@ -303,6 +304,10 @@ func sendMsg(msg dto.Message, broadcast bool) error {
 				}
 			}
 		}
+		wsResponse(senderConn, dto.WsResponse{
+			Status:  http.StatusOK,
+			Message: "Send broadcast msg successfully",
+		})
 	} else {
 		sent := false
 		// send to exactly userID
@@ -319,9 +324,32 @@ func sendMsg(msg dto.Message, broadcast bool) error {
 		}
 		if !sent {
 			log.Printf("Failed to send message to %s\n", msg.To)
+			wsResponse(senderConn, dto.WsResponse{
+				Status:  http.StatusInternalServerError,
+				Message: fmt.Sprintf("Failed to send message to %s", msg.To),
+			})
 			return errors.New(fmt.Sprintf("Failed to send message to %s", msg.To))
 		}
+		wsResponse(senderConn, dto.WsResponse{
+			Status:  http.StatusOK,
+			Message: fmt.Sprintf("Sent to %s", msg.To),
+		})
 	}
 
 	return nil
+}
+
+func wsResponse(conn *websocket.Conn, resp dto.WsResponse) {
+	data, err := json.Marshal(resp)
+	if err != nil {
+		log.Println("Failed to encode response:", err)
+		return
+	}
+
+	if conn != nil {
+		err := conn.WriteMessage(websocket.TextMessage, data)
+		if err != nil {
+			log.Println("Failed to send response:", err)
+		}
+	}
 }
