@@ -27,6 +27,7 @@ export class CallComponent implements OnInit {
   message: string
   receivedMessages: string[] = [];
   /** FOR WebSocket */
+  websocketMess: string
   wsMessages: Message[] = [];
   private msgSubscription: Subscription | null = null;
 
@@ -70,7 +71,7 @@ export class CallComponent implements OnInit {
     this.websocketSvc.close();
   }
 
-  startCall() {
+  connectWebsocket() {
     // INIT WebSocket - Auto connect to server
     this.websocketSvc.connect(this.meetingId, this.userId);
     this.msgSubscription = this.websocketSvc.getMessages().subscribe((message) => {
@@ -81,55 +82,57 @@ export class CallComponent implements OnInit {
         console.log(`response: ${message.status} ${message.msg}`)
       }
     });
-    
-    // // creating webrtc datachannel connection
-    // this.data2WaySender.createOffer().then((d: any) => {
-    //   this.data2WaySender.setLocalDescription(d)
-    //   console.log(new Date() + ' data2WaySender.createOffer')
-    // })
-    // this.data2WaySender.addEventListener('connectionstatechange', _event => {
-    //   console.log('connectionstatechange-state:' + this.data2WaySender.connectionState)
-    //   if (this.data2WaySender.connectionState === 'connected') {
-    //     console.log('datachannel connected!')
-    //   }
-    // });
+  }
 
-    // // sender part of the call
-    // navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then((stream) => {
-    //   const senderVideo: any = document.getElementById('senderVideo');
-    //   senderVideo.srcObject = stream;
-    //   const tracks = stream.getTracks();
-    //   for (let i = 0; i < tracks.length; i++) {
-    //     this.pcSender.addTrack(stream.getTracks()[i]);
-    //   }
-    //   this.pcSender.createOffer().then((d: any) => {
-    //     this.pcSender.setLocalDescription(d)
-    //     console.log(new Date() + ' pcSender.createOffer')
-    //   })
-    // })
-    // // you can use event listner so that you inform he is connected!
-    // this.pcSender.addEventListener('connectionstatechange', _event => {
-    //   console.log('connectionstatechange-state:' + this.pcSender.connectionState)
-    //   if (this.pcSender.connectionState === 'connected') {
-    //     console.log('horray!')
-    //   }
-    // });
+  startCall() {
+    // creating webrtc datachannel connection
+    this.data2WaySender.createOffer().then((d: any) => {
+      this.data2WaySender.setLocalDescription(d)
+      console.log(new Date() + ' data2WaySender.createOffer')
+    })
+    this.data2WaySender.addEventListener('connectionstatechange', _event => {
+      console.log('connectionstatechange-state:' + this.data2WaySender.connectionState)
+      if (this.data2WaySender.connectionState === 'connected') {
+        console.log('datachannel connected!')
+      }
+    });
 
-    // // receiver part of the call
-    // this.pcReceiver.addTransceiver('video', { direction: 'recvonly' })
+    // sender part of the call
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then((stream) => {
+      const senderVideo: any = document.getElementById('senderVideo');
+      senderVideo.srcObject = stream;
+      const tracks = stream.getTracks();
+      for (let i = 0; i < tracks.length; i++) {
+        this.pcSender.addTrack(stream.getTracks()[i]);
+      }
+      this.pcSender.createOffer().then((d: any) => {
+        this.pcSender.setLocalDescription(d)
+        console.log(new Date() + ' pcSender.createOffer')
+      })
+    })
+    // you can use event listner so that you inform he is connected!
+    this.pcSender.addEventListener('connectionstatechange', _event => {
+      console.log('connectionstatechange-state:' + this.pcSender.connectionState)
+      if (this.pcSender.connectionState === 'connected') {
+        console.log('horray!')
+      }
+    });
 
-    // this.pcReceiver.createOffer()
-    //   .then((d: any) => {
-    //     this.pcReceiver.setLocalDescription(d)
-    //     console.log(new Date() + ' pcReceiver.createOffer')
-    //   })
+    // receiver part of the call
+    this.pcReceiver.addTransceiver('video', { direction: 'recvonly' })
 
-    // this.pcReceiver.ontrack = (event: { streams: any[]; }) => {
-    //   const receiverVideo: any = document.getElementById('receiverVideo');
-    //   receiverVideo.srcObject = event.streams[0]
-    //   receiverVideo.autoplay = true
-    //   receiverVideo.controls = true
-    // }
+    this.pcReceiver.createOffer()
+      .then((d: any) => {
+        this.pcReceiver.setLocalDescription(d)
+        console.log(new Date() + ' pcReceiver.createOffer')
+      })
+
+    this.pcReceiver.ontrack = (event: { streams: any[]; }) => {
+      const receiverVideo: any = document.getElementById('receiverVideo');
+      receiverVideo.srcObject = event.streams[0]
+      receiverVideo.autoplay = true
+      receiverVideo.controls = true
+    }
 
   }
 
@@ -216,15 +219,16 @@ export class CallComponent implements OnInit {
     };
   }
 
-  /** WebSocket Functions */
+  /***************************** WebSocket Functions *******************************/
   sendWsMessage() {
     const data : Message = {
       from: this.userId,
       to: this.peerID,
-      msg: this.message,
+      msg: this.websocketMess,
       roomId: this.meetingId
     }
 
     this.websocketSvc.sendMessage(data);
+    this.wsMessages.push(data)
   }
 }
