@@ -87,13 +87,11 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 		// Giải mã JSON
 		var msg dto.Message
 		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Println("Invalid JSON:", err)
+			log.Printf("Invalid JSON: %v", err)
 			continue
+		} else {
+			log.Printf("Received: %v", msg)
 		}
-
-		msg.From = req.UserID
-		msg.RoomID = req.RoomID
-
 		// Phát tin nhắn trong phòng
 		err = broadcastToRoom(msg)
 		if err != nil {
@@ -281,7 +279,7 @@ func broadcastToRoom(msg dto.Message) error {
 	var conf = *config.AppConfig.WebSock
 	conf.Mutex.Lock()
 	connections, exists := conf.RoomLst[msg.RoomID]
-	conf.Mutex.Lock()
+	conf.Mutex.Unlock()
 
 	if !exists {
 		log.Printf("Room %s not found\n", msg.RoomID)
