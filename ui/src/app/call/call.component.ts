@@ -4,6 +4,9 @@ import { Sdp } from './Sdp';
 import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChangeDetectorRef } from '@angular/core';
+import { Message } from './Message';
+import { Subscription } from 'rxjs';
+import { WebsocketService } from './websocket.service';
 
 @Component({
   selector: 'app-call',
@@ -23,12 +26,22 @@ export class CallComponent implements OnInit {
   userId: string
   message: string
   receivedMessages: string[] = [];
+  /** FOR WebSocket */
+  wsMessages: Message[] = [];
+  private msgSubscription: Subscription | null = null;
 
-  constructor(private http: HttpClient, private route: ActivatedRoute, private cdr: ChangeDetectorRef) {
+
+  constructor(
+    private http: HttpClient,
+    private route: ActivatedRoute,
+    private cdr: ChangeDetectorRef,
+    private websocketSvc: WebsocketService) {
   }
 
 
   ngOnInit() {
+    // INIT WebRTC
+  
     // use http://localhost:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
     // and http://localhost:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
     // start the call
@@ -52,55 +65,71 @@ export class CallComponent implements OnInit {
     this.setupVideoConnections();
   }
 
+  ngOnDestroy(): void {
+    this.msgSubscription?.unsubscribe();
+    this.websocketSvc.close();
+  }
+
   startCall() {
-    // creating webrtc datachannel connection
-    this.data2WaySender.createOffer().then((d: any) => {
-      this.data2WaySender.setLocalDescription(d)
-      console.log(new Date() + ' data2WaySender.createOffer')
-    })
-    this.data2WaySender.addEventListener('connectionstatechange', _event => {
-      console.log('connectionstatechange-state:' + this.data2WaySender.connectionState)
-      if (this.data2WaySender.connectionState === 'connected') {
-        console.log('datachannel connected!')
+    // INIT WebSocket - Auto connect to server
+    this.websocketSvc.connect(this.meetingId, this.userId);
+    this.msgSubscription = this.websocketSvc.getMessages().subscribe((message) => {
+      if (message && !message.status) { // received message from peers
+        console.log(`Received msg from ${message.from}: ${message.msg}`)
+        this.wsMessages.push(message);
+      } else if (message && message.status) { // response msg from websocket server
+        console.log(`response: ${message.status} ${message.msg}`)
       }
     });
+    
+    // // creating webrtc datachannel connection
+    // this.data2WaySender.createOffer().then((d: any) => {
+    //   this.data2WaySender.setLocalDescription(d)
+    //   console.log(new Date() + ' data2WaySender.createOffer')
+    // })
+    // this.data2WaySender.addEventListener('connectionstatechange', _event => {
+    //   console.log('connectionstatechange-state:' + this.data2WaySender.connectionState)
+    //   if (this.data2WaySender.connectionState === 'connected') {
+    //     console.log('datachannel connected!')
+    //   }
+    // });
 
-    // sender part of the call
-    navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then((stream) => {
-      const senderVideo: any = document.getElementById('senderVideo');
-      senderVideo.srcObject = stream;
-      const tracks = stream.getTracks();
-      for (let i = 0; i < tracks.length; i++) {
-        this.pcSender.addTrack(stream.getTracks()[i]);
-      }
-      this.pcSender.createOffer().then((d: any) => {
-        this.pcSender.setLocalDescription(d)
-        console.log(new Date() + ' pcSender.createOffer')
-      })
-    })
-    // you can use event listner so that you inform he is connected!
-    this.pcSender.addEventListener('connectionstatechange', _event => {
-      console.log('connectionstatechange-state:' + this.pcSender.connectionState)
-      if (this.pcSender.connectionState === 'connected') {
-        console.log('horray!')
-      }
-    });
+    // // sender part of the call
+    // navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then((stream) => {
+    //   const senderVideo: any = document.getElementById('senderVideo');
+    //   senderVideo.srcObject = stream;
+    //   const tracks = stream.getTracks();
+    //   for (let i = 0; i < tracks.length; i++) {
+    //     this.pcSender.addTrack(stream.getTracks()[i]);
+    //   }
+    //   this.pcSender.createOffer().then((d: any) => {
+    //     this.pcSender.setLocalDescription(d)
+    //     console.log(new Date() + ' pcSender.createOffer')
+    //   })
+    // })
+    // // you can use event listner so that you inform he is connected!
+    // this.pcSender.addEventListener('connectionstatechange', _event => {
+    //   console.log('connectionstatechange-state:' + this.pcSender.connectionState)
+    //   if (this.pcSender.connectionState === 'connected') {
+    //     console.log('horray!')
+    //   }
+    // });
 
-    // receiver part of the call
-    this.pcReceiver.addTransceiver('video', { direction: 'recvonly' })
+    // // receiver part of the call
+    // this.pcReceiver.addTransceiver('video', { direction: 'recvonly' })
 
-    this.pcReceiver.createOffer()
-      .then((d: any) => {
-        this.pcReceiver.setLocalDescription(d)
-        console.log(new Date() + ' pcReceiver.createOffer')
-      })
+    // this.pcReceiver.createOffer()
+    //   .then((d: any) => {
+    //     this.pcReceiver.setLocalDescription(d)
+    //     console.log(new Date() + ' pcReceiver.createOffer')
+    //   })
 
-    this.pcReceiver.ontrack = (event: { streams: any[]; }) => {
-      const receiverVideo: any = document.getElementById('receiverVideo');
-      receiverVideo.srcObject = event.streams[0]
-      receiverVideo.autoplay = true
-      receiverVideo.controls = true
-    }
+    // this.pcReceiver.ontrack = (event: { streams: any[]; }) => {
+    //   const receiverVideo: any = document.getElementById('receiverVideo');
+    //   receiverVideo.srcObject = event.streams[0]
+    //   receiverVideo.autoplay = true
+    //   receiverVideo.controls = true
+    // }
 
   }
 
@@ -187,4 +216,15 @@ export class CallComponent implements OnInit {
     };
   }
 
+  /** WebSocket Functions */
+  sendWsMessage() {
+    const data : Message = {
+      from: this.userId,
+      to: this.peerID,
+      msg: this.message,
+      roomId: this.meetingId
+    }
+
+    this.websocketSvc.sendMessage(data);
+  }
 }

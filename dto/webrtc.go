@@ -17,5 +17,5 @@ type Message struct {
 
 type WsResponse struct {
 	Status  int    `json:"status"`
-	Message string `json:"message"`
+	Message string `json:"msg"`
 }

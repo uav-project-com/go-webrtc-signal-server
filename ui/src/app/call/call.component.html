@@ -11,12 +11,24 @@
   <br/>
   <hr/>
   <div class="container_msg">
+    <h2>WebRTC data-channel Chat</h2>
     <textarea [(ngModel)]="message" rows="4" placeholder="Type your message here..."></textarea>
-    <button class="send-button" (click)="sendMsg()">Send</button>
+    <button class="send-button" (click)="sendMsg()">Send RTC msg</button>
   </div>
+  <div>
+    <h2>WebSocket Chat</h2>
+    <button (click)="sendWsMessage()">Send WebSocket msg</button>
+  </div>
+  <h4>Received data-channel webrtc messages:</h4>
   <div class="scrollable-container">
     <ul>
-      <li *ngFor="let msg in receivedMessages">{{ msg }}</li>
+      <li *ngFor="let msg of receivedMessages">{{ msg }}</li>
     </ul>
   </div>
+  <hr/>
+  <h4>Received websocket messages:</h4>
+  <ul>
+    <li *ngFor="let m of wsMessages">{{ m.msg }}</li>
+  </ul>
+  
 </div>
