@@ -13,7 +13,7 @@
   <h2>WebRTC data-channel Chat</h2>
   <div class="container_msg">
     <textarea [(ngModel)]="message" rows="4" placeholder="Type your message here..."></textarea>
-    <button class="send-button" (click)="sendMsg()">Send RTC msg</button>
+    <button class="send-button" (click)="sendMsg()">Rtc send</button>
   </div>
   <h4>Received data-channel webrtc messages:</h4>
   <div class="scrollable-container">
@@ -32,11 +32,11 @@
 
   <h2>WebSocket Chat</h2>
   <button (click)="connectWebsocket()" class="start-call">
-    Start the chat websocket!
+    Start the chat websocket && chat with data-channel!
   </button>
   <div class="container_msg">
     <textarea [(ngModel)]="websocketMess" rows="4" placeholder="Type your message here..."></textarea>
-    <button class="send-button" (click)="sendWsMessage()">Send WebSocket msg</button>
+    <button class="send-button" (click)="sendWsMessage()">WS Send</button>
   </div>
 
   <h4>Received websocket messages:</h4>

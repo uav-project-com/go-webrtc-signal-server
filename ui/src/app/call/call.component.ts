@@ -3,7 +3,6 @@ import { HttpClient } from '@angular/common/http';
 import { Sdp } from './Sdp';
 import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { ChangeDetectorRef } from '@angular/core';
 import { Message } from './Message';
 import { Subscription } from 'rxjs';
 import { WebsocketService } from './websocket.service';
@@ -31,18 +30,21 @@ export class CallComponent implements OnInit {
   wsMessages: Message[] = [];
   private msgSubscription: Subscription | null = null;
 
+  private config: RTCConfiguration = {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  };
+
 
   constructor(
     private http: HttpClient,
     private route: ActivatedRoute,
-    private cdr: ChangeDetectorRef,
     private websocketSvc: WebsocketService) {
   }
 
 
   ngOnInit() {
     // INIT WebRTC
-  
+
     // use http://localhost:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
     // and http://localhost:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
     // start the call
@@ -50,18 +52,10 @@ export class CallComponent implements OnInit {
     this.peerID = this.route.snapshot.paramMap.get('peerID');
     this.userId = this.route.snapshot.paramMap.get('userId')
 
-    const config: RTCConfiguration = {
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    };
-
     // video is one-way, each connection is independent and works separately: { direction: 'recvonly' }
-    this.pcSender = new RTCPeerConnection(config)
-    this.pcReceiver = new RTCPeerConnection(config)
-    // Unlike video, DataChannel requires a bidirectional connection:
-    this.data2WaySender = new RTCPeerConnection(config)
+    this.pcSender = new RTCPeerConnection(this.config)
+    this.pcReceiver = new RTCPeerConnection(this.config)
 
-    // create data channel
-    this.setupDataConnections();
     // setup video connection
     this.setupVideoConnections();
   }
@@ -71,31 +65,29 @@ export class CallComponent implements OnInit {
     this.websocketSvc.close();
   }
 
+  /**
+   * Button event, start to:
+   * - init websocket
+   * - start to connect data-channel webrtc
+   */
   connectWebsocket() {
     // INIT WebSocket - Auto connect to server
     this.websocketSvc.connect(this.meetingId, this.userId);
     this.msgSubscription = this.websocketSvc.getMessages().subscribe((message) => {
       if (message && !message.status) { // received message from peers
-        console.log(`Received msg from ${message.from}: ${message.msg}`)
-        this.wsMessages.push(message);
+        this.handlerMsg(message)
       } else if (message && message.status) { // response msg from websocket server
         console.log(`response: ${message.status} ${message.msg}`)
+        if (message.status === 200 && message.msg.startsWith("onConnected")) {
+          console.log("Websocket connected!")
+          // websocket is ok now, start to call Webrtc
+          this.startControlUav()
+        }
       }
     });
   }
 
   startCall() {
-    // creating webrtc datachannel connection
-    this.data2WaySender.createOffer().then((d: any) => {
-      this.data2WaySender.setLocalDescription(d)
-      console.log(new Date() + ' data2WaySender.createOffer')
-    })
-    this.data2WaySender.addEventListener('connectionstatechange', _event => {
-      console.log('connectionstatechange-state:' + this.data2WaySender.connectionState)
-      if (this.data2WaySender.connectionState === 'connected') {
-        console.log('datachannel connected!')
-      }
-    });
 
     // sender part of the call
     navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then((stream) => {
@@ -136,41 +128,7 @@ export class CallComponent implements OnInit {
 
   }
 
-  async sendMsg() {
-    if (this.dataChannel.readyState === 'open') {
-      console.log('Sending: ' + this.message)
-      this.dataChannel.send(this.message);
-      this.receivedMessages.push('You: ' + this.message);
-      this.message = '';
-      // Manually trigger change detection
-      this.cdr.detectChanges();
-    }
-  }
-
   private setupVideoConnections() {
-    this.data2WaySender.onicecandidate = (event) => {
-      if (event.candidate) {
-        // Send ICE candidate to remote peer via HTTP signaling
-        this.http.post('http://127.0.0.1:8080/webrtc/candidate/m/' 
-          + this.meetingId + '/c/' + this.userId + '/p/' + this.peerID,
-          { candidate: btoa(JSON.stringify(event.candidate)) }).subscribe();
-      }
-    };
-    
-    // Once ICE gathering is complete, send SDP offer
-    this.data2WaySender.onicegatheringstatechange = () => {
-      if (this.data2WaySender.iceGatheringState === "complete") {
-        console.log(new Date() + " data2WaySender HTTP POST SDP");
-        this.http.post<Sdp>('http://127.0.0.1:8080/webrtc/sdp/m/'
-          + this.meetingId + '/c/' + this.userId + '/p/' + this.peerID,
-          { sdp: btoa(JSON.stringify(this.data2WaySender.localDescription)) })
-          .subscribe(response => {
-            this.data2WaySender.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(response.Sdp))));
-          });
-      }
-    };
-    
-
     this.pcSender.onicecandidate = (event: { candidate: null; }) => {
       if (event.candidate === null) {
         console.log(new Date() + ' sender http.post')
@@ -193,35 +151,12 @@ export class CallComponent implements OnInit {
     }
   }
 
-  private setupDataConnections() {
-    // must init before create channel for listen event of create channel `chat`
-    this.data2WaySender.ondatachannel = (event) => {
-      console.log("Data channel received on receiver");
-      this.dataChannel = event.channel; // Store the data channel reference
-
-      this.dataChannel.onmessage = (messageEvent) => {
-        console.log("Received message from sender:", messageEvent.data);
-        this.receivedMessages.push("Peer: " + messageEvent.data);
-        this.cdr.detectChanges();
-      };
-
-      this.dataChannel.onopen = () => console.log("Receiver data channel is open");
-    };
-
-    // Create sender's data channel
-    this.dataChannel = this.data2WaySender.createDataChannel("chat");
-
-    this.dataChannel.onopen = () => console.log("Data channel opened!");
-    this.dataChannel.onmessage = (event) => {
-      console.log("Received message:", event.data);
-      this.receivedMessages.push("You: " + event.data);
-      this.cdr.detectChanges();
-    };
-  }
-
   /***************************** WebSocket Functions *******************************/
+  /**
+   * Normal chatting with websocket
+   */
   sendWsMessage() {
-    const data : Message = {
+    const data: Message = {
       from: this.userId,
       to: this.peerID,
       msg: this.websocketMess,
@@ -230,5 +165,139 @@ export class CallComponent implements OnInit {
 
     this.websocketSvc.sendMessage(data);
     this.wsMessages.push(data)
+  }
+
+  /**
+   * Chatting with webrtc Data-channel
+   */
+  async sendMsg() {
+    if (this.dataChannel.readyState === 'open') {
+      console.log('Sending: ' + this.message)
+      this.dataChannel.send(this.message);
+      this.receivedMessages.push('You: ' + this.message);
+      this.message = '';
+    } else {
+      console.warn("dataChannel is not open")
+    }
+  }
+
+  /**
+   * Creating data-channel connection p2p after websocket connect for controling UAV
+   */
+  private startControlUav() {
+    // create data channel
+    this.setupDataChannelConnections();
+    // TODO seting up video connection
+  }
+
+  private async handlerMsg(message: Message) {
+    console.log(`Received msg: ${message}`)
+    try {
+      // Trying to parse Webrtc messages
+      let data = JSON.parse(atob(message.msg))
+      if (data.type === "offer") {
+        console.log("received msg: offer")
+        await this.data2WaySender.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await this.data2WaySender.createAnswer();
+        await this.data2WaySender.setLocalDescription(answer);
+
+        const answerMsg: Message = {
+          from: this.userId,
+          to: message.from,
+          msg: btoa(JSON.stringify({ type: "answer", answer: this.data2WaySender.localDescription })),
+          roomId: this.meetingId
+        }
+        console.log(`Answer: ${JSON.stringify({ type: "answer", answer: this.data2WaySender.localDescription })}`)
+
+        this.websocketSvc.sendMessage(answerMsg);
+      } else if (data.type === "answer") {
+        console.log("received msg: answer")
+        if (this.data2WaySender.signalingState === "have-local-offer") {
+          await this.data2WaySender.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } else {
+          console.warn("Ignoring duplicate answer");
+        }
+      } else if (data.type === "candidate") {
+        console.log("received msg: candidate")
+        await this.data2WaySender.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } else {
+        console.warn(`Received unknown msg: ${data}`)
+      }
+    } catch (e) {
+      console.warn(e)
+      // normal message chatting, just a websocket chat example
+      this.wsMessages.push(message);
+    }
+  }
+
+
+  /**
+   * Init webrtc streaming from Raspi5 Client (Bob) and Android control Device (Alice)
+   */
+  private async setupDataChannelConnections() {
+    // Unlike video, DataChannel requires a bidirectional connection:
+    this.data2WaySender = new RTCPeerConnection(this.config)
+    // oncandidate event
+    this.data2WaySender.onicecandidate = (event: { candidate: any; }) => {
+      if (event.candidate) {
+        const answerMsg: Message = {
+          from: this.userId,
+          to: this.peerID,
+          msg: btoa(JSON.stringify({ type: "candidate", candidate: event.candidate })),
+          roomId: this.meetingId
+        }
+        console.log(`candidate: ${JSON.stringify({ type: "candidate", candidate: event.candidate })}`)
+        this.websocketSvc.sendMessage(answerMsg);
+      }
+    };
+
+    // ondatachannel event to chat
+    this.data2WaySender.ondatachannel = (event: { channel: RTCDataChannel; }) => {
+      console.log("Data channel received on receiver");
+      this.dataChannel = event.channel; // Store the data channel reference
+
+      this.dataChannel.onmessage = (messageEvent) => {
+        console.log("Received message from sender:", messageEvent.data);
+        this.receivedMessages.push("Peer: " + messageEvent.data);
+      };
+
+      this.dataChannel.onopen = () => console.log("DataChannel Open");
+    };
+
+    // Assume We are the first one join to room, so let create that room: Create sender's data channel
+    this.dataChannel = this.data2WaySender.createDataChannel("chat");
+
+    this.dataChannel.onopen = () => console.log("Data channel opened!");
+    this.dataChannel.onmessage = (event) => {
+      console.log("Received message:", event.data);
+      this.receivedMessages.push("You: " + event.data);
+    };
+
+
+    // Creating webrtc datachannel connection FIRST for control UAV, Video stream and other will be init later
+    // sending offer info to other side
+    this.data2WaySender.createOffer().then(async (offer: any) => {
+      this.data2WaySender.setLocalDescription(offer)
+      console.log(new Date() + ' data2WaySender.createOffer')
+
+
+      const data: Message = {
+        from: this.userId,
+        to: this.peerID,
+        msg: btoa(JSON.stringify({ type: "offer", offer: offer })),
+        roomId: this.meetingId
+      }
+      console.log(`offer: ${JSON.stringify({ type: "offer", offer: offer })}`)
+      // sending offer, TODO: check ws ready state to send, else addEventListener `open` event to send offer 
+      this.websocketSvc.sendMessage(data);
+    })
+
+    this.data2WaySender.addEventListener('connectionstatechange', (_event: any) => {
+      console.log('connectionstatechange-state:' + this.data2WaySender.connectionState)
+      if (this.data2WaySender.connectionState === 'connected') {
+        console.log('datachannel connected!')
+      }
+    });
+
   }
 }

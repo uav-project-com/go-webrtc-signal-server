@@ -1,13 +1,9 @@
 package service
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
-	"github.com/pion/rtcp"
-	"github.com/pion/webrtc/v4"
-	"github.com/pkg/errors"
 	"go-rest-api/config"
 	"go-rest-api/dto"
 	"go-rest-api/utils"
@@ -15,6 +11,12 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"github.com/pion/rtcp"
+	"github.com/pion/webrtc/v4"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -59,6 +61,11 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 	}
 	// mapping UserID to new Room
 	rooms[req.RoomID][req.UserID] = conn
+	// echo connected event to user in the first time
+	wsResponse(conn, dto.WsResponse{
+		Status:  http.StatusOK,
+		Message: "onConnected-" + fmt.Sprint(len(rooms[req.RoomID])),
+	})
 	mutex.Unlock() // unlock resource
 	log.Printf("[%s] %s joined room %s\n", req.RoomID, req.UserID, req.RoomID)
 	defer func() {
@@ -88,10 +95,15 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 		// Giải mã JSON
 		var msg dto.Message
 		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("Invalid JSON: %v", err)
+			log.Printf("Invalid JSON: %s %v", message, err)
 			continue
 		} else {
 			log.Printf("Received: %v", msg)
+			data, err := base64.StdEncoding.DecodeString(msg.Msg)
+			if err != nil {
+				log.Println("error:", err)
+			}
+			log.Printf("Content: %v", string(data))
 		}
 		// Send message to other
 		err = sendMsg(msg, conn, false)
