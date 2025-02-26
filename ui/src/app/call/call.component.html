@@ -13,15 +13,12 @@
   <h2>WebRTC data-channel Chat</h2>
   <div class="container_msg">
     <textarea [(ngModel)]="message" rows="4" placeholder="Type your message here..."></textarea>
-    <button class="send-button" (click)="sendMsg()">Rtc send</button>
+    <input type="submit" class="send-button" (keydown.enter)="sendMsg()" (click)="sendMsg()" value="Rtc send"/>
   </div>
   <h4>Received data-channel webrtc messages:</h4>
   <div class="scrollable-container">
     <ul>
-      <li *ngFor="let msg of receivedMessages">{{ msg }}</li>
-    </ul>
-    <ul>
-      @for (item of receivedMessages; track item) {
+      @for (item of listMessage; track item) {
       <li>{{ item }}</li>
       } @empty {
       <li>There are no items.</li>

@@ -1,11 +1,11 @@
-import { Component, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Sdp } from './Sdp';
-import { ActivatedRoute } from '@angular/router';
-import { FormsModule } from '@angular/forms';
-import { Message } from './Message';
-import { Subscription } from 'rxjs';
-import { WebsocketService } from './websocket.service';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core'
+import { HttpClient } from '@angular/common/http'
+import { Sdp } from './Sdp'
+import { ActivatedRoute } from '@angular/router'
+import { FormsModule } from '@angular/forms'
+import { Message } from './Message'
+import { Subscription } from 'rxjs'
+import { WebsocketService } from './websocket.service'
 
 @Component({
   selector: 'app-call',
@@ -24,7 +24,7 @@ export class CallComponent implements OnInit {
   peerID: string
   userId: string
   message: string
-  receivedMessages: string[] = [];
+  listMessage: string[] = [];
   /** FOR WebSocket */
   websocketMess: string
   wsMessages: Message[] = [];
@@ -36,6 +36,7 @@ export class CallComponent implements OnInit {
 
 
   constructor(
+    private cdr: ChangeDetectorRef,
     private http: HttpClient,
     private route: ActivatedRoute,
     private websocketSvc: WebsocketService) {
@@ -75,7 +76,7 @@ export class CallComponent implements OnInit {
     this.websocketSvc.connect(this.meetingId, this.userId);
     this.msgSubscription = this.websocketSvc.getMessages().subscribe((message) => {
       if (message && !message.status) { // received message from peers
-        this.handlerMsg(message)
+        this.handlerMsg(message).then()
       } else if (message && message.status) { // response msg from websocket server
         console.log(`response: ${message.status} ${message.msg}`)
         if (message.status === 200 && message.msg.startsWith("onConnected")) {
@@ -170,14 +171,19 @@ export class CallComponent implements OnInit {
   /**
    * Chatting with webrtc Data-channel
    */
-  async sendMsg() {
+  async sendMsg(text?: string) {
     if (this.dataChannel.readyState === 'open') {
       console.log('Sending: ' + this.message)
-      this.dataChannel.send(this.message);
-      this.receivedMessages.push('You: ' + this.message);
-      this.message = '';
+      const msg = text ? text : this.message
+      this.dataChannel.send(msg)
+      this.listMessage.push(this.userId + ": " + msg)
+      this.message = ''
+      this.cdr.detectChanges()
+      if (msg === 'video') {
+        // await this.startStreamingVideoRtc()
+      }
     } else {
-      console.warn("dataChannel is not open")
+      console.warn('dataChannel is not open')
     }
   }
 
@@ -258,7 +264,8 @@ export class CallComponent implements OnInit {
 
       this.dataChannel.onmessage = (messageEvent) => {
         console.log("Received message from sender:", messageEvent.data);
-        this.receivedMessages.push("Peer: " + messageEvent.data);
+        this.listMessage.push("Peer: " + messageEvent.data);
+        this.cdr.detectChanges()
       };
 
       this.dataChannel.onopen = () => console.log("DataChannel Open");
@@ -270,7 +277,11 @@ export class CallComponent implements OnInit {
     this.dataChannel.onopen = () => console.log("Data channel opened!");
     this.dataChannel.onmessage = (event) => {
       console.log("Received message:", event.data);
-      this.receivedMessages.push("You: " + event.data);
+      this.listMessage.push("Friend: " + event.data);
+      this.cdr.detectChanges()
+      if (event.data === 'video') {
+        // this.startStreamingVideoRtc()
+      }
     };
 
 
@@ -288,7 +299,7 @@ export class CallComponent implements OnInit {
         roomId: this.meetingId
       }
       console.log(`offer: ${JSON.stringify({ type: "offer", offer: offer })}`)
-      // sending offer, TODO: check ws ready state to send, else addEventListener `open` event to send offer 
+      // sending offer, TODO: check ws ready state to send, else addEventListener `open` event to send offer
       this.websocketSvc.sendMessage(data);
     })
 
