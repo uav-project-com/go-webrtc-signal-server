@@ -3,10 +3,12 @@ import { WebSocketSubject } from 'rxjs/webSocket';
 import { Observable, RetryConfig, catchError, of, retry } from 'rxjs';
 import { Message } from './Message';
 
+export const MEDIA_TYPE = "md"
+export const DATA_TYPE = "dt"
+
 @Injectable({
   providedIn: 'root'
 })
-
 export class WebsocketService {
   // Observable - Stream variable => varName$
   private socket$: WebSocketSubject<any> | null = null;
@@ -29,8 +31,24 @@ export class WebsocketService {
     }
   }
 
-  sendMessage(message: Message): void {
+  sendMessage(message: Message, type?: string): void {
+    if (type && type === DATA_TYPE) {
+      // dt => data-channel
+      message.channel = DATA_TYPE
+      this.socket$?.next(message);
+    } else if (type && type === MEDIA_TYPE) {
+      // md => media
+      message.channel = MEDIA_TYPE
+    }
     this.socket$?.next(message);
+    let log = null
+    try {
+      message.msg = atob(message.msg)
+      log = JSON.stringify(message)
+      console.log(`ws sending: ${log}`)
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   /**

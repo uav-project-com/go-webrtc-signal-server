@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -56,13 +57,15 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 	} else {
 		// validate user joined in this roomID
 		if _, exists := rooms[req.RoomID][req.UserID]; exists {
-			return errors.New(fmt.Sprintf("User %s already joined", req.UserID))
+			// TODO: enable re-join to room
+			// return errors.New(fmt.Sprintf("User %s already joined", req.UserID))
+			log.Println("Warning Re-join room:", req.RoomID, req.UserID)
 		}
 	}
 	// mapping UserID to new Room
 	rooms[req.RoomID][req.UserID] = conn
 	// echo connected event to user in the first time
-	wsResponse(conn, dto.WsResponse{
+	wsResponse(nil, conn, dto.WsResponse{
 		Status:  http.StatusOK,
 		Message: "onConnected-" + fmt.Sprint(len(rooms[req.RoomID])),
 	})
@@ -106,7 +109,7 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 			log.Printf("Content: %v", string(data))
 		}
 		// Send message to other
-		err = sendMsg(msg, conn, false)
+		err = sendMsg(msg, conn, msg.To == nil)
 		if err != nil {
 			log.Println("Send msg error:", err)
 		}
@@ -309,14 +312,16 @@ func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error 
 	if broadcast {
 		// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
 		for user, conn := range connections {
-			if user != msg.From {
+			if msg.From != nil && user != *msg.From {
+				conf.Mutex.Lock()
 				err := conn.WriteMessage(websocket.TextMessage, data)
+				conf.Mutex.Unlock()
 				if err != nil {
 					log.Printf("Failed to send message to %s: %v\n", user, err)
 				}
 			}
 		}
-		wsResponse(senderConn, dto.WsResponse{
+		wsResponse(nil, senderConn, dto.WsResponse{
 			Status:  http.StatusOK,
 			Message: "Send broadcast msg successfully",
 		})
@@ -324,8 +329,10 @@ func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error 
 		sent := false
 		// send to exactly userID
 		for user, conn := range connections {
-			if user == msg.To {
+			if msg.From != nil && user == *msg.To {
+				conf.Mutex.Lock()
 				err := conn.WriteMessage(websocket.TextMessage, data)
+				conf.Mutex.Unlock()
 				if err != nil {
 					log.Printf("Failed to send message to %s: %v\n", user, err)
 				} else {
@@ -335,23 +342,24 @@ func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error 
 			}
 		}
 		if !sent {
-			log.Printf("Failed to send message to %s\n", msg.To)
-			wsResponse(senderConn, dto.WsResponse{
+			log.Printf("Failed to send message to %s\n", *msg.To)
+			wsResponse(nil, senderConn, dto.WsResponse{
 				Status:  http.StatusInternalServerError,
-				Message: fmt.Sprintf("Failed to send message to %s", msg.To),
+				Message: fmt.Sprintf("Failed to send message to %s", *msg.To),
 			})
-			return errors.New(fmt.Sprintf("Failed to send message to %s", msg.To))
+			return errors.New(fmt.Sprintf("Failed to send message to %s", *msg.To))
 		}
-		wsResponse(senderConn, dto.WsResponse{
+		wsResponse(conf.Mutex, senderConn, dto.WsResponse{
 			Status:  http.StatusOK,
-			Message: fmt.Sprintf("Sent to %s", msg.To),
+			Message: fmt.Sprintf("Sent to %s", *msg.To),
 		})
 	}
 
 	return nil
 }
 
-func wsResponse(conn *websocket.Conn, resp dto.WsResponse) {
+func wsResponse(mutex *sync.Mutex, conn *websocket.Conn, resp dto.WsResponse) {
+	resp.Time = time.Now().Unix()
 	data, err := json.Marshal(resp)
 	if err != nil {
 		log.Println("Failed to encode response:", err)
@@ -359,6 +367,10 @@ func wsResponse(conn *websocket.Conn, resp dto.WsResponse) {
 	}
 
 	if conn != nil {
+		if mutex != nil {
+			mutex.Lock()
+			defer mutex.Unlock()
+		}
 		err := conn.WriteMessage(websocket.TextMessage, data)
 		if err != nil {
 			log.Println("Failed to send response:", err)
