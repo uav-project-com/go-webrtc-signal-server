@@ -60,8 +60,8 @@ export class CallComponent implements OnInit {
   }
 
   startCall() {
-    // sender part of the call
-    const isAlice = this.userId === "alice"
+    // simulator controller - streamer UAV
+    const isAlice = this.userId === "alice" || true
     if (isAlice) {
       navigator.mediaDevices.getUserMedia({video: true, audio: false}).then((stream) => {
         const senderVideo: any = document.getElementById('senderVideo');
