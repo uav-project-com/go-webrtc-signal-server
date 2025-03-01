@@ -20,7 +20,7 @@ export class CallComponent implements OnInit {
   dataChannel: RTCDataChannel | null = null
 
   meetingId: string
-  peerID: string
+  peerId: string
   userId: string
   message: string
   listMessage: string[] = []
@@ -53,7 +53,7 @@ export class CallComponent implements OnInit {
     // and http://localhost:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
     // start the call
     this.meetingId = this.route.snapshot.paramMap.get('meetingId')
-    this.peerID = this.route.snapshot.paramMap.get('peerID')
+    this.peerId = this.route.snapshot.paramMap.get('peerID')
     this.userId = this.route.snapshot.paramMap.get('userId')
   }
 
@@ -91,7 +91,7 @@ export class CallComponent implements OnInit {
   sendWsMessage() {
     const data: Message = {
       from: this.userId,
-      to: this.peerID,
+      to: this.peerId,
       msg: this.websocketMess,
       roomId: this.meetingId
     }
@@ -156,7 +156,11 @@ export class CallComponent implements OnInit {
             }
           } else if (channel === MEDIA_TYPE) {
             console.log(`answer ${channel}`)
-            await this.peers[peerId].setRemoteDescription(new RTCSessionDescription(data.sdp))
+            if (this.peers[peerId].signalingState === 'have-local-offer') {
+              await this.peers[peerId].setRemoteDescription(new RTCSessionDescription(data.sdp))
+            } else {
+              console.warn('media: ignoring duplicate answer')
+            }
           }
           break
         case 'candidate':
@@ -188,7 +192,8 @@ export class CallComponent implements OnInit {
 
 
   private async handlerMediaOffer(peerId: string, data: { sdp: RTCSessionDescriptionInit }) {
-    this.peers[peerId] = this.createPeerConnection()
+    // create new peer connection for receiving peer video stream
+    this.peers[peerId] = this.createPeerConnection(this.userId, peerId)
     await this.peers[peerId].setRemoteDescription(new RTCSessionDescription(data.sdp))
     await this.sendAnswer(peerId)
     await this.addPendingCandidates(peerId)
@@ -219,7 +224,7 @@ export class CallComponent implements OnInit {
       if (event.candidate) {
         const answerMsg: Message = {
           from: this.userId,
-          to: this.peerID,
+          to: this.peerId,
           msg: btoa(JSON.stringify({type: 'candidate', candidate: event.candidate})),
           roomId: this.meetingId
         }
@@ -263,7 +268,7 @@ export class CallComponent implements OnInit {
 
       const data: Message = {
         from: this.userId,
-        to: this.peerID,
+        to: this.peerId,
         msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
         roomId: this.meetingId
       }
@@ -298,21 +303,19 @@ export class CallComponent implements OnInit {
       console.error('Stream not found:', error);
     }
   }
-  private onIceCandidate = (event: { candidate: any }) => {
-    if (event.candidate) {
-      const msg = {
-        from: this.userId,
-        to: this.peerID,
-        msg: btoa(JSON.stringify({type: 'candidate', candidate: event.candidate})),
-        roomId: this.meetingId
-      }
-      this.websocketSvc.sendMessage(msg, MEDIA_TYPE)
-    }
-  }
-
-  private createPeerConnection = () => {
+  private createPeerConnection = (userId: string, peerId: string) => {
     const pc = new RTCPeerConnection(this.config)
-    pc.onicecandidate = this.onIceCandidate
+    pc.onicecandidate = (event: any) => {
+      if (event.candidate) {
+        const msg = {
+          from: userId,
+          to: peerId,
+          msg: btoa(JSON.stringify({type: 'candidate', candidate: event.candidate})),
+          roomId: this.meetingId
+        }
+        this.websocketSvc.sendMessage(msg, MEDIA_TYPE)
+      }
+    }
     pc.ontrack = this.onAddStream
     this.localStream.getTracks().forEach(track => {
       pc.addTrack(track, this.localStream)
@@ -379,8 +382,8 @@ export class CallComponent implements OnInit {
     // setting local stream
     await this.getLocalStream().then(async () => {
         console.log('Ready')
-        // Connection with signaling server is ready, and so is local stream
-        this.peers[this.userId] = this.createPeerConnection()
+        // Create sender peerConnection for sending flow of streaming video
+        this.peers[this.userId] = this.createPeerConnection(this.userId, this.peerId)
         await this.sendOffer(this.userId)
         await this.addPendingCandidates(this.userId)
       }

@@ -3,6 +3,7 @@ module go-rest-api
 go 1.22.4
 
 require (
+	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jinzhu/gorm v1.9.16

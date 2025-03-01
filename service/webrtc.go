@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"go-rest-api/config"
 	"go-rest-api/dto"
 	"go-rest-api/utils"
@@ -101,7 +102,7 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 			log.Printf("Invalid JSON: %s %v", message, err)
 			continue
 		} else {
-			log.Printf("Received: %v", msg)
+			log.Printf("Received: %v", spew.Sdump(msg, dto.Message{}))
 			data, err := base64.StdEncoding.DecodeString(msg.Msg)
 			if err != nil {
 				log.Println("error:", err)
@@ -126,6 +127,7 @@ func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) 
 
 	offer := webrtc.SessionDescription{}
 	utils.Decode(session.Sdp, &offer)
+	spew.Dump(offer)
 
 	// Create a new RTCPeerConnection
 	// this is the gist of webrtc, generates and process SDP
@@ -308,7 +310,8 @@ func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error 
 		log.Println("JSON encoding error:", err)
 		return errors.New(fmt.Sprintf("JSON encoding error: %s", err))
 	}
-
+	// TODO for test
+	broadcast = true
 	if broadcast {
 		// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
 		for user, conn := range connections {

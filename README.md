@@ -58,7 +58,7 @@ go-rest-api
      - Run PostgreSQL in a Docker container:
 
        ```sh
-       docker run --name postgres-db -e POSTGRES_USER=your_db_user -e POSTGRES_PASSWORD=your_db_password -e POSTGRES_DB=your_db_name -p 5432:5432 -d postgres
+       docker run -d --name postgres-db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=password -e POSTGRES_DB=h_engine -p 5432:5432 -d postgres
        ```
 
      - Update the `.env` file with your PostgreSQL credentials:
