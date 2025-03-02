@@ -5,8 +5,6 @@ import {Message} from './Message'
 import {Subscription} from 'rxjs'
 import {WebsocketService} from './websocket.service'
 
-const DEBUG_LEVEL = 'log'
-
 @Component({
   selector: 'app-call',
   imports: [FormsModule],
@@ -39,14 +37,6 @@ export class CallComponent implements OnInit {
   }
 
   ngOnInit() {
-    // TRACE LOG:
-    if (DEBUG_LEVEL !== 'log') {
-      window.console.log = () => {
-      }
-    }
-
-    // INIT WebRTC
-
     // use http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
     // and http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
     // start the call
@@ -110,7 +100,17 @@ export class CallComponent implements OnInit {
     this.peers[this.peerId].ontrack = this.onAddStream
     // add track
     await navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(stream => {
+      console.log('Stream found');
+      this.localStream = stream;
+      // Attach the local stream to the video element
+      const localVideo: any = document.getElementById('localVideo');
+      if (localVideo) {
+        localVideo.srcObject = this.localStream;
+      }
+
+      // add track
       this.peers[this.peerId].addTrack(stream.getTracks()[0], stream);
+
     });
     // setting on-candidate event
     this.peers[this.peerId].onicecandidate = (e: any) => {
