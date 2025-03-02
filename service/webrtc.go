@@ -310,8 +310,6 @@ func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error 
 		log.Println("JSON encoding error:", err)
 		return errors.New(fmt.Sprintf("JSON encoding error: %s", err))
 	}
-	// TODO for test
-	broadcast = true
 	if broadcast {
 		// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
 		for user, conn := range connections {

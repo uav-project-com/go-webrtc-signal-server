@@ -49,8 +49,8 @@ export class CallComponent implements OnInit {
 
     // INIT WebRTC
 
-    // use http://localhost:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
-    // and http://localhost:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
+    // use http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
+    // and http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
     // start the call
     this.meetingId = this.route.snapshot.paramMap.get('meetingId')
     this.peerId = this.route.snapshot.paramMap.get('peerID')
