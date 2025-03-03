@@ -28,8 +28,8 @@ func NewRoute(productApi *api.ProductController, rtcApi *api.WebRtcController) *
 	r.GET("/products/:id", api.FindProduct)
 	r.PUT("/products/:id", api.UpdateProduct)
 	r.DELETE("/products/:id", api.DeleteProduct)
-	// webrtc
-	r.POST("/webrtc/sdp/m/:meetingId/c/:userID/p/:peerID/s/:isSender", rtcApi.MakeVideoCallHandler)
+	//// webrtc
+	//r.POST("/webrtc/sdp/m/:meetingId/c/:userID/p/:peerID/s/:isSender", rtcApi.MakeVideoCallHandler)
 
 	// Join room with websocket
 	r.GET("/ws/join/:roomId/c/:userId", rtcApi.WebSocketConnectHandler)
