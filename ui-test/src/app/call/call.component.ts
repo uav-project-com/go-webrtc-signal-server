@@ -5,6 +5,8 @@ import {Message} from './Message'
 import {Subscription} from 'rxjs'
 import {WebsocketService} from './websocket.service'
 
+const ENABLE_LOCAL_VIDEO = false
+
 @Component({
   selector: 'app-call',
   imports: [FormsModule],
@@ -37,8 +39,8 @@ export class CallComponent implements OnInit {
   }
 
   ngOnInit() {
-    // use http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
-    // and http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
+    // use http://192.168.20.191:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
+    // and http://192.168.20.191:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
     // start the call
     this.meetingId = this.route.snapshot.paramMap.get('meetingId')
     this.peerId = this.route.snapshot.paramMap.get('peerID')
@@ -50,7 +52,8 @@ export class CallComponent implements OnInit {
       this.hangup()
       this.msgSubscription?.unsubscribe()
       this.websocketSvc.close()
-    } catch (_e) {}
+    } catch (_e) {
+    }
   }
 
   /**
@@ -99,19 +102,22 @@ export class CallComponent implements OnInit {
     this.peers[this.peerId] = new RTCPeerConnection(this.config)
     this.peers[this.peerId].ontrack = this.onAddStream
     // add track
-    await navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(stream => {
-      console.log('Stream found');
-      this.localStream = stream;
-      // Attach the local stream to the video element
-      const localVideo: any = document.getElementById('localVideo');
-      if (localVideo) {
-        localVideo.srcObject = this.localStream;
-      }
+    if (this.userId === 'alice') // alice stream sent to bob
+      await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
+        console.log('Stream found');
+        this.localStream = stream;
+        if (ENABLE_LOCAL_VIDEO) {
+          // Attach the local stream to the video element
+          const localVideo: any = document.getElementById('localVideo');
+          if (localVideo) {
+            localVideo.srcObject = this.localStream;
+          }
+        }
 
-      // add track
-      this.peers[this.peerId].addTrack(stream.getTracks()[0], stream);
+        // add track
+        this.peers[this.peerId].addTrack(stream.getTracks()[0], stream);
 
-    });
+      });
     // setting on-candidate event
     this.peers[this.peerId].onicecandidate = (e: any) => {
       console.log("ICE Candidate Event Triggered:", e.candidate)

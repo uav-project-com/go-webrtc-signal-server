@@ -12,7 +12,7 @@ export const DATA_TYPE = "dt"
 export class WebsocketService {
   // Observable - Stream variable => varName$
   private socket$: WebSocketSubject<any> | null = null;
-  private url = 'ws://192.168.1.103:8080/ws'; // Replace with your WebSocket URL
+  private url = 'ws://192.168.20.191:8080/ws'; // Replace with your WebSocket URL
 
   constructor() { }
 
