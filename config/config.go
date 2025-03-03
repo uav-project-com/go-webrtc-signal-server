@@ -1,15 +1,17 @@
 package config
 
 import (
-	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
+	"gopkg.in/yaml.v3"
 )
 
 func CorsMiddleware() gin.HandlerFunc {
@@ -28,6 +30,23 @@ func CorsMiddleware() gin.HandlerFunc {
 	}
 }
 
+func GetWebSocket() websocket.Upgrader {
+	// Upgrade is used to upgrade HTTP connections to WebSocket connections
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			// Allow all connections by default (for development purposes)
+			return true
+		},
+	}
+}
+
+// WebSocketConf Quản lý kết nối WebSocket của user
+type WebSocketConf struct {
+	Mutex   *sync.Mutex
+	RoomLst map[string]map[string]*websocket.Conn
+	Upgrade websocket.Upgrader
+}
+
 type Database struct {
 	Host     string `yaml:"host"`
 	Port     string `yaml:"port"`
@@ -41,12 +60,13 @@ type App struct {
 }
 
 type Config struct {
-	Database               Database `yaml:"database"`
-	App                    App      `yaml:"app"`
-	stun                   []string `yaml:"stun-urls"`
-	PeerConnectionMapLocal map[string]chan *webrtc.TrackLocalStaticRTP
-	Api                    *webrtc.API
-	IceConfig              *webrtc.Configuration
+	Database          Database `yaml:"database"`
+	App               App      `yaml:"app"`
+	stun              []string `yaml:"stun-urls"`
+	PeerConnectionMap map[string]chan *webrtc.TrackLocalStaticRTP
+	Api               *webrtc.API
+	IceConfig         *webrtc.Configuration
+	WebSock           *WebSocketConf
 }
 
 type Sdp struct {
@@ -116,7 +136,17 @@ func LoadConfig(resourceDir string) {
 	}
 	AppConfig.IceConfig = &peerConnectionConfig
 	AppConfig.Api = api
-	AppConfig.PeerConnectionMapLocal = make(map[string]chan *webrtc.TrackLocalStaticRTP) // sender to channel of track
+	AppConfig.PeerConnectionMap = make(map[string]chan *webrtc.TrackLocalStaticRTP) // sender to channel of track
+
+	// config websocket
+	// Quản lý nhiều phòng chat
+	var roomClients = make(map[string]map[string]*websocket.Conn) // roomId -> (username -> WebSocket)
+	var mutex = &sync.Mutex{}                                     // Tránh race condition
+	AppConfig.WebSock = &WebSocketConf{
+		Mutex:   mutex,
+		RoomLst: roomClients,
+		Upgrade: GetWebSocket(),
+	}
 }
 
 func getEnv(key, fallback string) string {

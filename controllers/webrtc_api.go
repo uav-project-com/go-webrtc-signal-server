@@ -18,6 +18,25 @@ func NewWebRtcController(svc service.VideoCallService) *WebRtcController {
 	return &WebRtcController{videoCallService: svc}
 }
 
+func (c *WebRtcController) WebSocketConnectHandler(ctx *gin.Context) {
+	// Detect client disconnection early
+	context := ctx.Request.Context()
+	if err := context.Err(); err != nil {
+		log.Println("Client disconnected before processing started:", err)
+		return
+	}
+	roomInfo := dto.JoinRequest{
+		RoomID: ctx.Param("roomId"),
+		UserID: ctx.Param("userId"),
+	}
+	err := c.videoCallService.JoinRoom(ctx, roomInfo)
+	if err != nil {
+		log.Println("Error joining room:", err)
+		return
+	}
+	ctx.JSON(http.StatusOK, "Joined room:"+roomInfo.RoomID)
+}
+
 func (c *WebRtcController) MakeVideoCallHandler(ctx *gin.Context) {
 	// Detect client disconnection early
 	context := ctx.Request.Context()

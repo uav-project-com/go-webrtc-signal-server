@@ -21,3 +21,4 @@
 go.work
 go.work.sum
 /.idea/vcs.xml
+examples/data-channel/node_modules/

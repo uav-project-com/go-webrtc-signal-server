@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "wscat": "^6.0.1"
+  }
+}
