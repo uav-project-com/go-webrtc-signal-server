@@ -2,15 +2,11 @@
 
 <div class="container_row">
   <div id="remoteStreams"></div>
-  <video autoplay controls height="500" id="senderVideo" muted width="500"></video>
-  <div class="layer2">
-    <video autoplay controls height="120" id="receiverVideo" muted width="160"></video>
-  </div>
   <br/>
   <hr/>
   <h2>WebRTC data-channel Chat</h2>
   <div class="container_msg">
-    <textarea [(ngModel)]="message" rows="4" placeholder="Type your message here..."></textarea>
+    <textarea [(ngModel)]="message" rows="4" placeholder="Type `video` for start chat sex..."></textarea>
     <input type="submit" class="send-button" (keydown.enter)="sendMsg()" (click)="sendMsg()" value="Rtc send"/>
   </div>
   <h4>Received data-channel webrtc messages:</h4>
@@ -26,7 +22,7 @@
   <hr />
 
   <h2>WebSocket Chat</h2>
-  <button (click)="connectWebsocket()" class="start-call">
+  <button (click)="connectWebsocket()" class="start-call" [disabled]="callBtnState">
     Start the chat websocket && chat with data-channel!
   </button>
   <div class="container_msg">
