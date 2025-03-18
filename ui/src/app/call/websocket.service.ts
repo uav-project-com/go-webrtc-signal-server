@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { WebSocketSubject } from 'rxjs/webSocket';
 import { Observable, RetryConfig, catchError, of, retry } from 'rxjs';
 import { Message } from './Message';
+import { environment } from '../../environments/environment';
 
 export const MEDIA_TYPE = "md"
 export const DATA_TYPE = "dt"
@@ -12,11 +13,13 @@ export const DATA_TYPE = "dt"
 export class WebsocketService {
   // Observable - Stream variable => varName$
   private socket$: WebSocketSubject<any> | null = null;
-  private url = 'ws://192.168.20.191:8080/ws'; // Replace with your WebSocket URL
+  private url = environment.socket; // Replace with your WebSocket URL
+  private defaultSrcId: any
 
   constructor() { }
 
   connect(roomId: string, userId: string): void {
+    this.defaultSrcId = userId
     const retryConfig: RetryConfig = {
       delay: 1000,
     };
@@ -32,6 +35,9 @@ export class WebsocketService {
   }
 
   sendMessage(message: Message, type?: string): void {
+    if (!message.from) {
+      message.from = this.defaultSrcId
+    }
     if (type && type === DATA_TYPE) {
       // dt => data-channel
       message.channel = DATA_TYPE

@@ -1,10 +1,15 @@
 <h2>Golang example</h2>
 
 <div class="container_row">
+  <div id="localStream"></div>
   <div id="remoteStreams"></div>
   <br/>
   <hr/>
   <h2>WebRTC data-channel Chat</h2>
+  <label>
+    <input type="checkbox" (change)="toggleVideoCall($event)" [checked]="isChecked"/> Enable video call
+  </label>
+  <p>Video call: {{ isChecked ? 'ON' : 'OFF' }}</p>
   <div class="container_msg">
     <textarea [(ngModel)]="message" rows="4" placeholder="Type `video` for start chat sex..."></textarea>
     <input type="submit" class="send-button" (keydown.enter)="sendMsg()" (click)="sendMsg()" value="Rtc send"/>
@@ -19,7 +24,7 @@
       }
     </ul>
   </div>
-  <hr />
+  <hr/>
 
   <h2>WebSocket Chat</h2>
   <button (click)="connectWebsocket()" class="start-call" [disabled]="callBtnState">
