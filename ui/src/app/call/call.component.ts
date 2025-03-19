@@ -7,6 +7,8 @@ import {DATA_TYPE, MEDIA_TYPE, WebsocketService} from './websocket.service'
 import {environment} from "../../environments/environment"
 
 const ENABLE_LOCAL_VIDEO = true
+const VIDEO_CALL_SIGNAL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
+const VIDEO_CALL_BACK_SIGNAL = '0af239b5-2482-472d-93d3-772f7f4cbc77'
 
 @Component({
   selector: 'app-call',
@@ -130,16 +132,15 @@ export class CallComponent implements OnInit {
     if (this.dataChannel.readyState === 'open') {
       console.log('Sending: ' + this.message)
       const msg = text ? text : this.message
-      if (msg === 'video') {
-        // websocket is ok now, start to call Webrtc
-        console.warn("step 01")
-        await this.startVideoCall().then()
-        this.dataChannel.send(msg)
-        this.listMessage.push(this.userId + ': ' + msg)
-        this.message = ''
-        document.getElementById("data-channel-text").textContent = ''
-        this.cdr.detectChanges()
+      let payload: Message = {
+        msg: msg === 'video' ? VIDEO_CALL_SIGNAL : msg,
+        from: this.userId
       }
+      this.dataChannel.send(JSON.stringify(payload))
+      this.listMessage.push("Me:" + msg)
+      this.message = ''
+      document.getElementById("data-channel-text").textContent = ''
+      this.cdr.detectChanges()
     } else {
       console.warn('dataChannel is not open')
     }
@@ -246,10 +247,23 @@ export class CallComponent implements OnInit {
     this.dataChannel.onopen = () => console.log('Data channel opened!')
     this.dataChannel.onmessage = (event) => {
       console.log('Received message:', event.data)
-      this.listMessage.push('Friend: ' + event.data)
-      this.cdr.detectChanges()
-      if (event.data === 'video') {
-        this.startVideoCall()
+      if (event.data) {
+        try{
+          let payload: Message = JSON.parse(event.data)
+          this.listMessage.push(`${payload.from}: ${payload.msg}`)
+          this.cdr.detectChanges()
+          if (payload.msg === VIDEO_CALL_SIGNAL) {
+            this.startVideoCall(payload.from).then(_ => {
+              // send signal video back to sender
+              this.sendMsg(VIDEO_CALL_BACK_SIGNAL)
+            })
+          } else if (payload.msg === VIDEO_CALL_BACK_SIGNAL) {
+            console.warn(`received accept to call video from ${payload.from}`)
+            this.startVideoCall(payload.from).then()
+          }
+        } catch (e){
+          console.log(e)
+        }
       }
     }
 
@@ -288,7 +302,7 @@ export class CallComponent implements OnInit {
   /**
    * Creating data-channel connection p2p after websocket connect for controlling UAV
    */
-  private async startVideoCall() {
+  private async startVideoCall(senderId: any) {
     // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
     await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
       console.log('Stream found')
@@ -303,16 +317,16 @@ export class CallComponent implements OnInit {
       }
     })
 
-    this.peers[this.peerId] = await this.init(this.peerId)
+    this.peers[senderId] = await this.init(senderId)
     // add track
     this.localStream.getTracks().forEach(track => {
       console.warn(`Adding track: ${track.kind}, ID: ${track.id}`)
-      this.peers[this.peerId].addTrack(track, this.localStream)
+      this.peers[senderId].addTrack(track, this.localStream)
     })
     console.warn("step 02")
     // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
-    let offer = await this.peers[this.peerId].createOffer()
-    await this.peers[this.peerId].setLocalDescription(offer)
+    let offer = await this.peers[senderId].createOffer()
+    await this.peers[senderId].setLocalDescription(offer)
     // sending offer to other peers (broadcast)
     this.websocketSvc.sendMessage({
       roomId: this.meetingId,
