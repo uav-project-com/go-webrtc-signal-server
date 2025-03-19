@@ -11,8 +11,8 @@
   </label>
   <p>Video call: {{ isChecked ? 'ON' : 'OFF' }}</p>
   <div class="container_msg">
-    <textarea [(ngModel)]="message" rows="4" placeholder="Type `video` for start chat sex..."></textarea>
-    <input type="submit" class="send-button" (keydown.enter)="sendMsg()" (click)="sendMsg()" value="Rtc send"/>
+    <textarea id="data-channel-text" [(ngModel)]="message" (keydown.enter)="sendMsg()" rows="4" placeholder="Type `video` for start chat sex..."></textarea>
+    <input type="submit" for="data-channel-text" class="send-button" (click)="sendMsg()" value="Rtc send"/>
   </div>
   <h4>Received data-channel webrtc messages:</h4>
   <div class="scrollable-container">
