@@ -4,7 +4,7 @@ import {FormsModule} from '@angular/forms'
 import {Message} from './Message'
 import {Subscription} from 'rxjs'
 import {DATA_TYPE, MEDIA_TYPE, WebsocketService} from './websocket.service'
-import {environment} from "../../environments/environment";
+import {environment} from "../../environments/environment"
 
 const ENABLE_LOCAL_VIDEO = false
 
@@ -35,7 +35,7 @@ export class CallComponent implements OnInit {
   private config: RTCConfiguration = {
     iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
   }
-  private initCount = 0;
+  private initCount = 0
 
   constructor(
     private cdr: ChangeDetectorRef,
@@ -46,9 +46,9 @@ export class CallComponent implements OnInit {
   private disableConsoleLevels(levels: (string)[]) {
     levels.forEach(level => {
       if (typeof console[level] === "function") {
-        console[level] = (() => {});
+        console[level] = (() => {})
       }
-    });
+    })
   }
 
   ngOnInit() {
@@ -72,8 +72,6 @@ export class CallComponent implements OnInit {
 
     // INIT WebRTC
 
-    // use http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=alice;peerID=bob
-    // and http://192.168.1.103:4200/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=bob;peerID=alice
     // start the call
     this.meetingId = this.route.snapshot.paramMap.get('meetingId')
     this.peerId = this.route.snapshot.paramMap.get('peerID')
@@ -167,7 +165,7 @@ export class CallComponent implements OnInit {
           case 'offer':
             console.log('received msg: offer')
             console.log(`offer ${channel}`)
-            await this.handlerOfferDataChannel(data, message)
+            await this.handlerOfferDataChannel(data)
             break
           case 'answer':
             console.log('received msg: answer')
@@ -189,13 +187,13 @@ export class CallComponent implements OnInit {
         await this.handleSignalingMediaMsg(data, senderId)
       }
     } catch (e) {
-      console.log(e)
+      console.trace(e)
       // normal message chatting, just a websocket chat example
       this.wsMessages.push(message)
     }
   }
 
-  private async handlerOfferDataChannel(data: { sdp: RTCSessionDescriptionInit }, message: Message) {
+  private async handlerOfferDataChannel(data: { sdp: RTCSessionDescriptionInit }) {
     await this.data2WaySender.setRemoteDescription(new RTCSessionDescription(data.sdp))
     const answer = await this.data2WaySender.createAnswer()
     await this.data2WaySender.setLocalDescription(answer)
@@ -290,20 +288,36 @@ export class CallComponent implements OnInit {
    * Creating data-channel connection p2p after websocket connect for controlling UAV
    */
   private async startVideoCall() {
-    this.peers[this.userId] = await this.init(this.userId);
-    await this.call();
+    // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
+    await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
+      console.log('Stream found')
+      this.localStream = stream
+      if (ENABLE_LOCAL_VIDEO) { // giả sử máy Bob là máy watching only (điều khiển UAV)
+        console.log("create local video")
+        const newRemoteStreamElem = document.createElement('video')
+        newRemoteStreamElem.autoplay = true
+        newRemoteStreamElem.srcObject = stream
+        newRemoteStreamElem.id = this.userId
+        document.querySelector('#localStream').appendChild(newRemoteStreamElem)
+      }
+    })
+
+    this.peers[this.userId] = await this.init(this.userId, true)
+    console.trace("step 02")
+    // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
+    let offer = await this.peers[this.userId].createOffer()
+    await this.peers[this.userId].setLocalDescription(offer)
+    // sending offer to other peers (broadcast)
+    this.websocketSvc.sendMessage({
+      roomId: this.meetingId,
+      msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
+    }, MEDIA_TYPE)
+    // adding to pending candidate list
+    await this.addPendingCandidates(this.userId)
   }
 
-  private async init(id: any) {
+  private async init(id: any, isLocalStream?: boolean) {
     console.warn(`init count: ${++this.initCount} with id: ${id}`)
-    if (id === this.userId || true) // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
-      await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
-        console.log('Stream found');
-        if (ENABLE_LOCAL_VIDEO && id === 'bob' || true) { // giả sử máy Bob là máy watching only (điều khiển UAV)
-          console.log("create local video")
-          this.localStream = stream;
-        }
-      });
     const pc = new RTCPeerConnection(this.config)
     // setting on-candidate event
     pc.onicecandidate = (e: any) => {
@@ -318,47 +332,40 @@ export class CallComponent implements OnInit {
     }
     // add track
     pc.ontrack = function (event: any) {
-      console.log("ontrack event triggered", event);
-      console.log("Streams received:", event.streams);
+      console.trace("ontrack event triggered", event)
+      console.trace("Streams received:", event.streams)
 
       if (event.streams.length === 0) {
-        console.error("No streams available in ontrack event");
-        return;
+        console.error("No streams available in ontrack event")
+        return
       }
-      console.log("create remote video")
-      const newRemoteStreamElem = document.createElement('video')
-      newRemoteStreamElem.autoplay = true
-      newRemoteStreamElem.srcObject = event.streams[0]
-      newRemoteStreamElem.id = id
-      document.querySelector('#remoteStreams').appendChild(newRemoteStreamElem)
+      let remoteVideo = document.getElementById(id) as HTMLVideoElement
+      if (!remoteVideo) {
+        remoteVideo = document.createElement('video')
+        remoteVideo.autoplay = true
+        remoteVideo.srcObject = event.streams[0]
+        remoteVideo.id = id
+        document.querySelector('#remoteStreams').appendChild(remoteVideo)
+      } else {
+        console.trace("Updating existing remote video element")
+        remoteVideo.srcObject = event.streams[0]
+      }
     }
     pc.oniceconnectionstatechange = () => {
-      console.log("ICE state:", pc.iceConnectionState);
+      console.log("ICE state:", pc.iceConnectionState)
     }
-    // add track
-    this.localStream.getTracks().forEach(track => {
-      console.log("Adding track:", track.kind);
-      pc.addTrack(track, this.localStream);
-    });
+    if (isLocalStream) {
+      // add track
+      this.localStream.getTracks().forEach(track => {
+        console.log("Adding track:", track.kind)
+        pc.addTrack(track, this.localStream)
+      })
+    }
     return pc
   }
 
-  private async call() {
-    console.trace("step 02")
-    // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
-    let offer = await this.peers[this.userId].createOffer();
-    await this.peers[this.userId].setLocalDescription(offer);
-    // sending offer to other peers (broadcast)
-    this.websocketSvc.sendMessage({
-      roomId: this.meetingId,
-      msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
-    }, MEDIA_TYPE)
-    // adding to pending candidate list
-    await this.addPendingCandidates(this.userId)
-  }
-
   private addPendingCandidates = async (sid: string) => {
-    console.trace("step 03")
+    console.warn("step 03")
     if (sid in this.pendingCandidates) {
       for (const candidate of this.pendingCandidates[sid]) {
         await this.peers[sid].addIceCandidate(new RTCIceCandidate(candidate))
@@ -376,38 +383,40 @@ export class CallComponent implements OnInit {
     switch (data.type) {
       case 'offer':
         console.trace("step 04")
-        console.log(`callee received offer from peers ${data.sdp}`)
+        console.log(`callee received offer from peers ${JSON.stringify(data.sdp)}`)
         // notice: this.userId: id of receiver offer
         this.peers[sid] = await this.init(sid) // create new peer-connection object map with peerId for receive remote video
-        await this.peers[sid].setRemoteDescription(new RTCSessionDescription(data.sdp));
+        await this.peers[sid].setRemoteDescription(new RTCSessionDescription(data.sdp))
         // we create an answer for send it back to other peers
-        const answer = await this.peers[sid].createAnswer();
+        const answer = await this.peers[sid].createAnswer()
         // set local SDP for callee
-        await this.peers[sid].setLocalDescription(answer);
+        await this.peers[sid].setLocalDescription(answer)
         // sending sdp local back to caller
         this.websocketSvc.sendMessage({
           roomId: this.meetingId,
           msg: btoa(JSON.stringify({type: answer.type, sdp: answer}))
         }, MEDIA_TYPE)
-        // adding to pending list
+        // adding all pending candidate to peer connection object
         await this.addPendingCandidates(sid).then()
         break
       case 'answer':
         console.trace("step 05")
-        console.log(`answer: ${data.sdp}`)
+        console.log(`answer: ${JSON.stringify(data.sdp)}`)
         if (this.peers[sid].signalingState !== "stable") {
-          await this.peers[sid].setRemoteDescription(new RTCSessionDescription(data.sdp));
+          await this.peers[sid].setRemoteDescription(new RTCSessionDescription(data.sdp))
         } else {
-          console.warn("Skipping setRemoteDescription(answer) because state is already stable");
+          console.warn("Skipping setRemoteDescription(answer) because state is already stable")
         }
 
         break
       case 'candidate':
         console.trace("step 06")
-        console.log(`candidate: ${data.sdp}`)
+        console.log(`candidate: ${JSON.stringify(data.sdp)}`)
         if (sid in this.peers) {
+          console.warn("add new candidate")
           await this.peers[sid].addIceCandidate(new RTCIceCandidate(data.sdp))
         } else {
+          console.warn("pending candidate")
           if (!(sid in this.pendingCandidates)) {
             this.pendingCandidates[sid] = []
           }
@@ -420,12 +429,12 @@ export class CallComponent implements OnInit {
   }
 
   hangup() {
-    this.peers[this.userId].close();
-    this.onCall = false;
+    this.peers[this.userId].close()
+    this.onCall = false
   }
 
   toggleVideoCall(event: any) {
-    this.isChecked = event.target.checked;
+    this.isChecked = event.target.checked
     if (this.onCall) {
       this.toggleMediaCall(this.isChecked).then()
     }
@@ -436,23 +445,23 @@ export class CallComponent implements OnInit {
         document.getElementById(this.userId).remove()
         this.peers[this.userId].track.stop()
         this.peers[this.userId].removeTrack(this.peers[this.userId])
-        console.log('Local media stopped');
+        console.log('Local media stopped')
       }
     } else {
-      const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+      const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false})
 
       localStream.getTracks().forEach(track => {
-        this.peers[this.userId].addTrack(track, localStream);
-      });
+        this.peers[this.userId].addTrack(track, localStream)
+      })
 
       // Renegotiate the connection to update media
-      const offer = await this.peers[this.userId].createOffer();
-      await this.peers[this.userId].setLocalDescription(offer);
+      const offer = await this.peers[this.userId].createOffer()
+      await this.peers[this.userId].setLocalDescription(offer)
       this.websocketSvc.sendMessage({
         roomId: this.meetingId,
         msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
       }, MEDIA_TYPE)
-      console.log('Local media resuming');
+      console.log('Local media resuming')
     }
   }
 
