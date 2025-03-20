@@ -24,10 +24,15 @@ export class CallComponent implements OnInit {
   dataChannel: RTCDataChannel | null = null
 
   meetingId: string
-  peerId: string
   userId: string
   message: string
   listMessage: string[] = []
+  // list peerConnection: create new element for each peerId (not my userId)
+  peers = {}
+  pendingCandidates = {}
+  localStream: MediaStream
+  // líst
+  idLocalList: string[] = []
   /** FOR WebSocket */
   websocketMess: string
   wsMessages: Message[] = []
@@ -76,7 +81,6 @@ export class CallComponent implements OnInit {
 
     // start the call
     this.meetingId = this.route.snapshot.paramMap.get('meetingId')
-    this.peerId = this.route.snapshot.paramMap.get('peerID')
     this.userId = this.route.snapshot.paramMap.get('userId')
   }
 
@@ -117,7 +121,6 @@ export class CallComponent implements OnInit {
   sendWsMessage() {
     const data: Message = {
       from: this.userId,
-      to: this.peerId,
       msg: this.websocketMess,
       roomId: this.meetingId
     }
@@ -237,7 +240,6 @@ export class CallComponent implements OnInit {
 
       this.dataChannel.onopen = () => {
         console.log('DataChannel Open')
-        this.onCall = true
       }
     }
 
@@ -291,12 +293,6 @@ export class CallComponent implements OnInit {
 
   }
 
-  /** Convert code from git@github.com:uav-project-com/rt-socket-server-python.git **/
-// list peerConnection: create new element for each peerId (not my userId)
-  peers = {}
-  pendingCandidates = {}
-  localStream: MediaStream
-
   // WebRTC methods for media streaming
 
   /**
@@ -306,15 +302,7 @@ export class CallComponent implements OnInit {
     // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
     await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
       console.log('Stream found')
-      this.localStream = stream
-      if (ENABLE_LOCAL_VIDEO) { // giả sử máy Bob là máy watching only (điều khiển UAV)
-        console.log("create local video")
-        const newRemoteStreamElem = document.createElement('video')
-        newRemoteStreamElem.autoplay = true
-        newRemoteStreamElem.srcObject = stream
-        newRemoteStreamElem.id = this.userId
-        document.querySelector('#localStream').appendChild(newRemoteStreamElem)
-      }
+      this.addLocalVideoElement(stream)
     })
 
     this.peers[senderId] = await this.init(senderId)
@@ -442,13 +430,16 @@ export class CallComponent implements OnInit {
           this.pendingCandidates[sid].push(data.sdp)
         }
         break
+      case 'removeTrack':
+        await this.removeTrack(sid)
+        break
       default:
         console.warn(`Received unknown msg: ${JSON.stringify(data)}`)
     }
   }
 
   hangup() {
-    this.peers[this.peerId].close()
+    // this.peers[this.peerId].close()
     this.onCall = false
   }
 
@@ -460,28 +451,66 @@ export class CallComponent implements OnInit {
   }
   private async toggleMediaCall(enable: boolean) {
     if (!enable) {
-      if (this.peers[this.userId] != null && this.peers[this.userId].track) {
-        document.getElementById(this.userId).remove()
-        this.peers[this.userId].track.stop()
-        this.peers[this.userId].removeTrack(this.peers[this.userId])
-        console.log('Local media stopped')
+      console.log("Disabling video call");
+      for (const sid in this.peers) {
+        await this.removeTrack(sid)
+        // 🔥 Notify other peers that media is stopped
+        this.websocketSvc.sendMessage({
+          roomId: this.meetingId,
+          msg: btoa(JSON.stringify({type: 'removeTrack', sid: sid}))
+        }, MEDIA_TYPE);
       }
     } else {
       const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false})
-
-      localStream.getTracks().forEach(track => {
-        this.peers[this.userId].addTrack(track, localStream)
-      })
-
-      // Renegotiate the connection to update media
-      const offer = await this.peers[this.userId].createOffer()
-      await this.peers[this.userId].setLocalDescription(offer)
-      this.websocketSvc.sendMessage({
-        roomId: this.meetingId,
-        msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
-      }, MEDIA_TYPE)
+      this.addLocalVideoElement(localStream)
+      for (const track of localStream.getTracks()) {
+        for (const sid in this.peers) {
+          this.peers[sid].addTrack(track, localStream)
+          // Renegotiate the connection to update media
+          const offer = await this.peers[sid].createOffer()
+          await this.peers[sid].setLocalDescription(offer)
+          this.websocketSvc.sendMessage({
+            roomId: this.meetingId,
+            msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
+          }, MEDIA_TYPE)
+        }
+      }
       console.log('Local media resuming')
     }
   }
 
+  addLocalVideoElement = (stream: any) => {
+    this.onCall = true
+    this.localStream = stream
+    if (ENABLE_LOCAL_VIDEO) { // giả sử máy Bob là máy watching only (điều khiển UAV)
+      let localVideo = document.getElementById(this.userId) as HTMLVideoElement
+      if (!localVideo) {
+        console.log("create local video")
+        const newRemoteStreamElem = document.createElement('video')
+        newRemoteStreamElem.autoplay = true
+        newRemoteStreamElem.srcObject = stream
+        newRemoteStreamElem.id = this.userId
+        document.querySelector('#localStream').appendChild(newRemoteStreamElem)
+      } else {
+        localVideo.srcObject = stream
+      }
+    }
+  }
+
+  private async removeTrack(sid: string) {
+    if (this.peers[sid] != null) {
+      const senders = this.peers[sid].getSenders(); // Get all RTP senders
+
+      for (const sender of senders) {
+        if (sender.track) {
+          sender.track.stop(); // Stop the media track
+          await this.peers[sid].removeTrack(sender); // Remove the track from the peer connection
+        }
+      }
+
+      // Remove video element
+      const videoElement = document.getElementById(sid);
+      if (videoElement) videoElement.remove();
+    }
+  }
 }

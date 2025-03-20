@@ -7,7 +7,7 @@
   <hr/>
   <h2>WebRTC data-channel Chat</h2>
   <label>
-    <input type="checkbox" (change)="toggleVideoCall($event)" [checked]="isChecked"/> Enable video call
+    <input type="checkbox" [(ngModel)]="isChecked" (click)="toggleVideoCall($event)" /> Enable video call
   </label>
   <p>Video call: {{ isChecked ? 'ON' : 'OFF' }}</p>
   <div class="container_msg">
