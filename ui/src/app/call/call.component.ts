@@ -452,14 +452,11 @@ export class CallComponent implements OnInit {
   private async toggleMediaCall(enable: boolean) {
     if (!enable) {
       console.log("Disabling video call");
-      for (const sid in this.peers) {
-        await this.removeTrack(sid)
-        // 🔥 Notify other peers that media is stopped
-        this.websocketSvc.sendMessage({
-          roomId: this.meetingId,
-          msg: btoa(JSON.stringify({type: 'removeTrack', sid: sid}))
-        }, MEDIA_TYPE);
-      }
+      // 🔥 Notify other peers that media is stopped
+      this.websocketSvc.sendMessage({
+        roomId: this.meetingId,
+        msg: btoa(JSON.stringify({type: 'removeTrack', sid: this.userId}))
+      }, MEDIA_TYPE);
     } else {
       const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false})
       this.addLocalVideoElement(localStream)
