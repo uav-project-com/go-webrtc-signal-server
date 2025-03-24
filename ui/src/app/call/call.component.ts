@@ -8,7 +8,6 @@ import {environment} from "../../environments/environment"
 
 const ENABLE_LOCAL_VIDEO = true
 const VIDEO_CALL_SIGNAL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
-const VIDEO_CALL_BACK_SIGNAL = '0af239b5-2482-472d-93d3-772f7f4cbc77'
 
 @Component({
   selector: 'app-call',
@@ -135,6 +134,9 @@ export class CallComponent implements OnInit {
     if (this.dataChannel.readyState === 'open') {
       console.log('Sending: ' + this.message)
       const msg = text ? text : this.message
+      if (msg === 'video') {
+        await this.startVideoCall(this.userId).then(_ => {})
+      }
       let payload: Message = {
         msg: msg === 'video' ? VIDEO_CALL_SIGNAL : msg,
         from: this.userId
@@ -255,13 +257,7 @@ export class CallComponent implements OnInit {
           this.listMessage.push(`${payload.from}: ${payload.msg}`)
           this.cdr.detectChanges()
           if (payload.msg === VIDEO_CALL_SIGNAL) {
-            this.startVideoCall(payload.from).then(_ => {
-              // send signal video back to sender
-              this.sendMsg(VIDEO_CALL_BACK_SIGNAL)
-            })
-          } else if (payload.msg === VIDEO_CALL_BACK_SIGNAL) {
-            console.warn(`received accept to call video from ${payload.from}`)
-            this.startVideoCall(payload.from).then()
+            this.startVideoCall(this.userId).then(_ => {})
           }
         } catch (e){
           console.log(e)
@@ -322,13 +318,9 @@ export class CallComponent implements OnInit {
     }, MEDIA_TYPE)
     // adding to pending candidate list
     await this.addPendingCandidates(this.userId)
-  }
 
-  private async init(id: any) {
-    console.warn(`init count: ${++this.initCount} with id: ${id}`)
-    const pc = new RTCPeerConnection(this.config)
     // setting on-candidate event
-    pc.onicecandidate = (e: any) => {
+    this.peers[senderId].onicecandidate = (e: any) => {
       console.log("ICE Candidate Event Triggered:", e.candidate)
       if (e.candidate) {
         // sending offer to other peers (broadcast)
@@ -338,6 +330,12 @@ export class CallComponent implements OnInit {
         }, MEDIA_TYPE)
       }
     }
+  }
+
+  private async init(id: any) {
+    console.warn(`init count: ${++this.initCount} with id: ${id}`)
+    const pc = new RTCPeerConnection(this.config)
+
     // add track
     pc.ontrack = function (event: any) {
       console.trace("ontrack event triggered", event)
@@ -404,6 +402,17 @@ export class CallComponent implements OnInit {
         }, MEDIA_TYPE)
         // adding all pending candidate to peer connection object
         await this.addPendingCandidates(sid).then()
+        // setting on-candidate event
+        this.peers[sid].onicecandidate = (e: any) => {
+          console.log("ICE Candidate Event Triggered:", e.candidate)
+          if (e.candidate) {
+            // sending offer to other peers (broadcast)
+            this.websocketSvc.sendMessage({
+              roomId: this.meetingId,
+              msg: btoa(JSON.stringify({type: 'candidate', sdp: e.candidate}))
+            }, MEDIA_TYPE)
+          }
+        }
         break
       case 'answer':
         console.warn("step 05")
@@ -413,7 +422,6 @@ export class CallComponent implements OnInit {
         } else {
           console.warn("Skipping setRemoteDescription(answer) because state is already stable")
         }
-
         break
       case 'candidate':
         console.warn("step 06")
