@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <title>WebRTC Loopback Demo</title>
+</head>
+<body>
+<h2>WebRTC Local Loopback (Alice ⇄ Bob)</h2>
+<video id="localVideo" autoplay playsinline muted width="320"></video>
+<video id="remoteVideo" autoplay playsinline width="320"></video>
+
+<script>
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+
+  const config = {
+    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+  };
+
+  const pc1 = new RTCPeerConnection(config); // Alice sender step 1
+  const pc2 = new RTCPeerConnection(config); // Bob
+
+  // ICE exchange
+  pc1.onicecandidate = e => { // sender step 2
+    if (e.candidate) {
+      pc2.addIceCandidate(e.candidate);
+    }
+  };
+
+  pc2.onicecandidate = e => {
+    if (e.candidate) {
+      pc1.addIceCandidate(e.candidate); // sender step 7
+    }
+  };
+
+  // Bob nhận media từ Alice
+  pc2.ontrack = e => {
+    remoteVideo.srcObject = e.streams[0];
+  };
+
+  async function start() {
+    const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+    localVideo.srcObject = stream;
+
+    // Alice gửi track cho Bob
+    stream.getTracks().forEach(track => pc1.addTrack(track, stream)); // sender step 3
+
+    const offer = await pc1.createOffer(); // sender step 4
+    await pc1.setLocalDescription(offer); // // sender step 5
+    await pc2.setRemoteDescription(pc1.localDescription);
+
+    const answer = await pc2.createAnswer();
+    await pc2.setLocalDescription(answer);
+    await pc1.setRemoteDescription(pc2.localDescription); // sender step 6
+  }
+
+  start();
+</script>
+</body>
+</html>
