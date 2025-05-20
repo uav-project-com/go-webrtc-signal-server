@@ -4,8 +4,8 @@ import { Observable, RetryConfig, catchError, of, retry } from 'rxjs';
 import { Message } from './Message';
 import { environment } from '../../environments/environment';
 
-export const MEDIA_TYPE = "md"
-export const DATA_TYPE = "dt"
+export const MEDIA_TYPE = 'md'
+export const DATA_TYPE = 'dt'
 
 @Injectable({
   providedIn: 'root'
@@ -24,12 +24,12 @@ export class WebsocketService {
       delay: 1000,
     };
     if (!this.socket$ || this.socket$.closed) {
-      let joinUrl = `${this.url}/join/${roomId}/c/${userId}`
+      const joinUrl = `${this.url}/join/${roomId}/c/${userId}`
       console.log(`connecting to: ${joinUrl}`)
       this.socket$ = new WebSocketSubject(joinUrl);
       this.socket$
       .pipe(
-        retry(retryConfig) //support auto reconnect
+        retry(retryConfig) // support auto reconnect
       )
     }
   }
