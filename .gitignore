@@ -22,3 +22,10 @@ go.work
 go.work.sum
 /.idea/vcs.xml
 examples/data-channel/node_modules/
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/go-webrtc-signal-server.iml
+/.idea/modules.xml
+/.idea/sonarlint/issuestore/4/4/448f683c76e06e244097ccc35ddc5f1de8a1fca3
+/.idea/sonarlint/issuestore/index.pb
+/.idea/sonarlint/securityhotspotstore/4/4/448f683c76e06e244097ccc35ddc5f1de8a1fca3
+/.idea/sonarlint/securityhotspotstore/index.pb
