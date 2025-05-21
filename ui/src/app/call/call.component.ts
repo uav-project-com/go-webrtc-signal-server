@@ -8,6 +8,7 @@ import {environment} from '../../environments/environment'
 
 const ENABLE_LOCAL_VIDEO = true
 const VIDEO_CALL_SIGNAL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
+const VIDEO_CALL_ACCEPT = '8a93ca36-1be0-4164-b59b-582467f721e9e'
 export function lw(msg: string) {
   console.warn(msg)
 }
@@ -19,6 +20,7 @@ export function lw(msg: string) {
   styleUrls: ['./call.component.css']
 })
 export class CallComponent implements OnInit {
+  roomMaster = false
   isChecked = true
   onCall = false
 
@@ -135,10 +137,6 @@ export class CallComponent implements OnInit {
     if (this.dataChannel.readyState === 'open') {
       console.log('Sending: ' + this.message)
       const msg = text || this.message
-      if (msg === 'video') {
-        await this.startVideoCall(this.userId).then(_ => {
-        })
-      }
       const payload: Message = {
         msg: msg === 'video' ? VIDEO_CALL_SIGNAL : msg,
         from: this.userId
@@ -254,8 +252,10 @@ export class CallComponent implements OnInit {
           this.listMessage.push(`${payload.from}: ${payload.msg}`)
           this.cdr.detectChanges()
           if (payload.msg === VIDEO_CALL_SIGNAL) {
-            this.startVideoCall(this.userId).then(_ => {
-            })
+            this.sendMsg(VIDEO_CALL_ACCEPT) // accept for video call
+          } else if (payload.msg === VIDEO_CALL_ACCEPT) {
+            this.roomMaster = true
+            this.startVideoCall(payload.from).then()
           }
         } catch (e) {
           console.log(e)
@@ -268,8 +268,6 @@ export class CallComponent implements OnInit {
     this.data2WaySender.createOffer().then(async (offer: any) => {
       await this.data2WaySender.setLocalDescription(offer)
       console.log(new Date() + ' data2WaySender.createOffer')
-
-
       const data: Message = {
         msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
         roomId: this.meetingId
@@ -298,26 +296,11 @@ export class CallComponent implements OnInit {
       console.log('Stream found')
       this.addLocalVideoElement(stream)
     })
-
-    this.peers[senderId] = await this.init(senderId, true)
-    // add track
-    this.localStream.getTracks().forEach(track => {
-      this.peers[senderId].addTrack(track, this.localStream)
-    })
-    // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
-    const offer = await this.peers[senderId].createOffer()
-    await this.peers[senderId].setLocalDescription(offer)
-    // sending offer to other peers (broadcast)
-    this.websocketSvc.sendMessage({
-      roomId: this.meetingId,
-      msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
-    }, MEDIA_TYPE)
-    // adding to pending candidate list
-    await this.addPendingCandidates(this.userId)
+    this.peers[senderId] = await this.init(senderId)
   }
 
-  private async init(id: any, isLocal: boolean) {
-    lw(`id: ${id} isLocal: ${isLocal}`)
+  private async init(id: any) {
+    lw(`id: ${id}`)
     const pc = new RTCPeerConnection(this.config)
     pc.onicecandidate = (e: any) => {
       console.log('ICE Candidate Event Triggered:', e.candidate)
@@ -332,26 +315,24 @@ export class CallComponent implements OnInit {
 
     // add track
     pc.ontrack = (event: any) => {
-      console.log('ontrack event triggered', event)
+      console.warn('ontrack event triggered', event)
       console.log('Streams received:', event.streams)
 
       if (event.streams.length === 0) {
         console.error('No streams available in ontrack event')
         return
       }
-      if (!isLocal) {
-        let video = document.getElementById(id) as HTMLVideoElement
-        if (!video) {
-          video = document.createElement('video')
-          video.autoplay = true
-          video.srcObject = event.streams[0]
-          video.id = id
-          video.playsInline = true
-          document.querySelector('#remoteStreams').appendChild(video)
-        } else {
-          console.log('Updating existing remote video element')
-          video.srcObject = event.streams[0]
-        }
+      let video = document.getElementById(id) as HTMLVideoElement
+      if (!video) {
+        video = document.createElement('video')
+        video.autoplay = true
+        video.srcObject = event.streams[0]
+        video.id = id
+        video.playsInline = true
+        document.querySelector('#remoteStreams').appendChild(video)
+      } else {
+        console.log('Updating existing remote video element')
+        video.srcObject = event.streams[0]
       }
     }
     pc.oniceconnectionstatechange = () => {
@@ -361,15 +342,23 @@ export class CallComponent implements OnInit {
     pc.onsignalingstatechange = () => {
       console.warn('Signaling State:', pc.signalingState)
     }
-    return pc
-  }
 
-  private addPendingCandidates = async (sid: string) => {
-    if (sid in this.pendingCandidates) {
-      for (const candidate of this.pendingCandidates[sid]) {
-        await this.peers[sid].addIceCandidate(new RTCIceCandidate(candidate))
-      }
+    // add track
+    this.localStream.getTracks().forEach(track => {
+      pc.addTrack(track, this.localStream)
+    })
+
+    // sending offer to other joiner room
+    if (this.roomMaster) {
+      // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      this.websocketSvc.sendMessage({
+        roomId: this.meetingId,
+        msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
+      }, MEDIA_TYPE)
     }
+    return pc
   }
 
   /**
@@ -382,19 +371,13 @@ export class CallComponent implements OnInit {
     switch (data.type) {
       case 'offer':
         console.log(`callee received offer from peers ${JSON.stringify(data.sdp)}`)
+        // get User media for receiver
+        await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
+          console.log('Stream found')
+          this.addLocalVideoElement(stream)
+        })
         // create new peer-connection object map with peerId for receive remote video
-        this.peers[senderId] = await this.init(senderId, false)
-        // setting on-candidate event
-        this.peers[senderId].onicecandidate = (e: any) => {
-          console.log('ICE Candidate Event Triggered:', e.candidate)
-          if (e.candidate) {
-            // sending offer to other peers (broadcast)
-            this.websocketSvc.sendMessage({
-              roomId: this.meetingId,
-              msg: btoa(JSON.stringify({type: 'candidate', sdp: e.candidate}))
-            }, MEDIA_TYPE)
-          }
-        }
+        this.peers[senderId] = await this.init(senderId)
         await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(data.sdp))
         // we create an answer for send it back to other peers
         const answer = await this.peers[senderId].createAnswer()
@@ -405,26 +388,16 @@ export class CallComponent implements OnInit {
           roomId: this.meetingId,
           msg: btoa(JSON.stringify({type: answer.type, sdp: answer}))
         }, MEDIA_TYPE)
-        // adding all pending candidate to peer connection object
-        await this.addPendingCandidates(senderId).then()
         break
       case 'answer':
         console.log(`answer: ${JSON.stringify(data.sdp)}`)
-        if (this.peers[this.userId].signalingState !== 'closed') {
-          await this.peers[this.userId].setRemoteDescription(new RTCSessionDescription(data.sdp))
+        if (this.peers[senderId].signalingState !== 'closed') {
+          await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(data.sdp))
         }
         break
       case 'candidate':
         console.log(`candidate: ${JSON.stringify(data.sdp)}`)
-        // if (senderId in this.peers) {
-        //   await this.peers[senderId].addIceCandidate(new RTCIceCandidate(data.sdp))
-        // } else {
-        //   if (!(senderId in this.pendingCandidates)) {
-        //     this.pendingCandidates[senderId] = []
-        //   }
-        //   this.pendingCandidates[senderId].push(data.sdp)
-        // }
-        await this.peers[this.userId].addIceCandidate(new RTCIceCandidate(data.sdp))
+        await this.peers[senderId].addIceCandidate(new RTCIceCandidate(data.sdp))
         break
       case 'removeTrack':
         await this.removeTrack(senderId)
