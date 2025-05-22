@@ -10,7 +10,6 @@ export class WebRTCService {
     iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
   }
   private localStream: MediaStream
-  private roomMaster = false
   private readonly roomId: string
   // list peerConnection: create new element for each peerId (not my userId)
   private peers = {}
@@ -60,17 +59,6 @@ export class WebRTCService {
     this.localStream.getTracks().forEach(track => {
       pc.addTrack(track, this.localStream)
     })
-
-    // sending offer to other joiner room
-    if (this.roomMaster) {
-      // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
-      const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
-      this.websocketSvc.sendMessage({
-        roomId: this.roomId,
-        msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
-      }, MEDIA_TYPE)
-    }
     return pc
   }
 
@@ -78,13 +66,21 @@ export class WebRTCService {
    * Creating data-channel connection p2p after websocket connect for controlling UAV
    */
   public async startVideoCall(senderId: any, addRemoteVideoCallback: any, addLocalVideoCallback: any) {
-    this.roomMaster = true
     // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
     await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
       console.log('Stream found')
       this.addLocalStream(stream, addLocalVideoCallback)
     })
     this.peers[senderId] = await this.initPeerConnection(senderId, addRemoteVideoCallback)
+    // sending offer to other joiner room
+    // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
+    const offer = await this.peers[senderId].createOffer()
+    await this.peers[senderId].setLocalDescription(offer)
+    this.websocketSvc.sendMessage({
+      roomId: this.roomId,
+      msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
+    }, MEDIA_TYPE)
+    await this.addPendingCandidates(senderId)
   }
 
   /**
@@ -116,6 +112,8 @@ export class WebRTCService {
           roomId: this.roomId,
           msg: btoa(JSON.stringify({type: answer.type, sdp: answer}))
         }, MEDIA_TYPE)
+        // add pending candidate cached which received from websocket too early
+        await this.addPendingCandidates(senderId)
         break
       case 'answer':
         console.log(`answer: ${JSON.stringify(data.sdp)}`)
@@ -125,7 +123,14 @@ export class WebRTCService {
         break
       case 'candidate':
         console.log(`candidate: ${JSON.stringify(data.sdp)}`)
-        await this.peers[senderId].addIceCandidate(new RTCIceCandidate(data.sdp))
+        if (senderId in this.peers) {
+          await this.peers[senderId].addIceCandidate(new RTCIceCandidate(data.sdp))
+        } else {
+          if (!(senderId in this.pendingCandidates)) {
+            this.pendingCandidates[senderId] = []
+          }
+          this.pendingCandidates[senderId].push(data.sdp)
+        }
         break
       case 'removeTrack':
         await this.removeTrack(senderId)
@@ -189,5 +194,17 @@ export class WebRTCService {
     this.onCall = true
     this.localStream = stream
     addLocalVideoCallback(stream, this.userId)
+  }
+
+  /**
+   * Get candidates from list pending when other peers sent it too early
+   * @param sid sender candidate
+   */
+  private addPendingCandidates = async (sid: string) => {
+    if (sid in this.pendingCandidates) {
+      for (const candidate of this.pendingCandidates[sid]) {
+        await this.peers[sid].addIceCandidate(new RTCIceCandidate(candidate))
+      }
+    }
   }
 }
