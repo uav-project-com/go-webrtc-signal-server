@@ -8,6 +8,7 @@ import {environment} from '../../environments/environment'
 import {WebRTCService} from './webrtc.service';
 import {RoomInfo} from './RoomInfo';
 
+const ENABLE_LOCAL_VIDEO = true
 const VIDEO_CALL_SIGNAL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
 const VIDEO_CALL_ACCEPT = '8a93ca36-1be0-4164-b59b-582467f721e9e'
 
@@ -187,7 +188,7 @@ export class CallComponent implements OnInit {
           default:
         }
       else {
-        await this.videoCallSvc.handleSignalingMediaMsg(data, senderId)
+        await this.videoCallSvc.handleSignalingMediaMsg(data, senderId, this.addRemoteVideoElement, this.addLocalVideoElement)
       }
     } catch (e) {
       console.log(e)
@@ -255,7 +256,7 @@ export class CallComponent implements OnInit {
           if (payload.msg === VIDEO_CALL_SIGNAL) {
             this.sendMsg(VIDEO_CALL_ACCEPT) // accept for video call
           } else if (payload.msg === VIDEO_CALL_ACCEPT) {
-            this.videoCallSvc.startVideoCall(payload.from).then()
+            this.videoCallSvc.startVideoCall(payload.from, this.addRemoteVideoElement, this.addLocalVideoElement).then()
           }
         } catch (e) {
           console.log(e)
@@ -290,7 +291,37 @@ export class CallComponent implements OnInit {
   toggleVideoCall(event: any) {
     this.isChecked = event.target.checked
     if (this.videoCallSvc.onCall) {
-      this.videoCallSvc.toggleMediaCall(this.isChecked).then()
+      this.videoCallSvc.toggleMediaCall(this.isChecked, this.addLocalVideoElement).then()
+    }
+  }
+
+  addRemoteVideoElement(stream: any, sid: string) {
+    let video = document.getElementById(sid) as HTMLVideoElement
+    if (!video) {
+      video = document.createElement('video')
+      video.autoplay = true
+      video.srcObject = stream
+      video.id = sid
+      video.playsInline = true
+      document.querySelector('#remoteStreams').appendChild(video)
+    } else {
+      console.log('Updating existing remote video element')
+      video.srcObject = stream
+    }
+  }
+  addLocalVideoElement(stream: any, sid: string) {
+    if (ENABLE_LOCAL_VIDEO) { // giả sử máy Bob là máy watching only (điều khiển UAV)
+      const localVideo = document.getElementById(sid) as HTMLVideoElement
+      if (!localVideo) {
+        console.log('create local video')
+        const newRemoteStreamElem = document.createElement('video')
+        newRemoteStreamElem.autoplay = true
+        newRemoteStreamElem.srcObject = stream
+        newRemoteStreamElem.id = sid
+        document.querySelector('#localStream').appendChild(newRemoteStreamElem)
+      } else {
+        localVideo.srcObject = stream
+      }
     }
   }
 }

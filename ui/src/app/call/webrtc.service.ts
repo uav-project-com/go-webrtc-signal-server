@@ -1,8 +1,6 @@
 import { Injectable } from '@angular/core';
 import {MEDIA_TYPE, WebsocketService} from './websocket.service';
-import {RoomInfo} from "./RoomInfo";
-
-const ENABLE_LOCAL_VIDEO = true
+import {RoomInfo} from './RoomInfo';
 
 @Injectable({
   providedIn: 'root'
@@ -25,7 +23,7 @@ export class WebRTCService {
     this.userId = room.userId
   }
 
-  public async init(id: any) {
+  public async initPeerConnection(id: string, setRemoteStreamCallback: any) {
     console.warn(`id: ${id}`)
     const pc = new RTCPeerConnection(this.config)
     pc.onicecandidate = (e: any) => {
@@ -48,18 +46,7 @@ export class WebRTCService {
         console.error('No streams available in ontrack event')
         return
       }
-      let video = document.getElementById(id) as HTMLVideoElement
-      if (!video) {
-        video = document.createElement('video')
-        video.autoplay = true
-        video.srcObject = event.streams[0]
-        video.id = id
-        video.playsInline = true
-        document.querySelector('#remoteStreams').appendChild(video)
-      } else {
-        console.log('Updating existing remote video element')
-        video.srcObject = event.streams[0]
-      }
+      setRemoteStreamCallback(event.streams[0], id)
     }
     pc.oniceconnectionstatechange = () => {
       console.warn('ICE Connection State:', pc.iceConnectionState)
@@ -90,33 +77,35 @@ export class WebRTCService {
   /**
    * Creating data-channel connection p2p after websocket connect for controlling UAV
    */
-  public async startVideoCall(senderId: any) {
+  public async startVideoCall(senderId: any, addRemoteVideoCallback: any, addLocalVideoCallback: any) {
     this.roomMaster = true
     // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
     await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
       console.log('Stream found')
-      this.addLocalVideoElement(stream)
+      this.addLocalStream(stream, addLocalVideoCallback)
     })
-    this.peers[senderId] = await this.init(senderId)
+    this.peers[senderId] = await this.initPeerConnection(senderId, addRemoteVideoCallback)
   }
 
   /**
    * Processing message for video peer-connection
    * @param data payload of websocket message
    * @param senderId id of sender
+   * @param addRemoteVideoCallback for set remote video stream
+   * @param addLocalVideoCallback for set local video stream
    * @private
    */
-  public async handleSignalingMediaMsg(data: any, senderId: string) {
+  public async handleSignalingMediaMsg(data: any, senderId: string, addRemoteVideoCallback: any, addLocalVideoCallback: any) {
     switch (data.type) {
       case 'offer':
         console.log(`callee received offer from peers ${JSON.stringify(data.sdp)}`)
         // get User media for receiver
         await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
           console.log('Stream found')
-          this.addLocalVideoElement(stream)
+          this.addLocalStream(stream, addLocalVideoCallback)
         })
         // create new peer-connection object map with peerId for receive remote video
-        this.peers[senderId] = await this.init(senderId)
+        this.peers[senderId] = await this.initPeerConnection(senderId, addRemoteVideoCallback)
         await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(data.sdp))
         // we create an answer for send it back to other peers
         const answer = await this.peers[senderId].createAnswer()
@@ -150,7 +139,7 @@ export class WebRTCService {
     this.onCall = false
   }
 
-  public async toggleMediaCall(enable: boolean) {
+  public async toggleMediaCall(enable: boolean, addLocalVideoCallback: any) {
     if (!enable) {
       console.log('Disabling video call');
       // 🔥 Notify other peers that media is stopped
@@ -160,7 +149,7 @@ export class WebRTCService {
       }, MEDIA_TYPE);
     } else {
       const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false})
-      this.addLocalVideoElement(localStream)
+      this.addLocalStream(localStream, addLocalVideoCallback)
       for (const track of localStream.getTracks()) {
         for (const sid in this.peers) {
           if (Object.prototype.hasOwnProperty.call(this.peers, sid)) {
@@ -179,24 +168,6 @@ export class WebRTCService {
     }
   }
 
-  private addLocalVideoElement = (stream: any) => {
-    this.onCall = true
-    this.localStream = stream
-    if (ENABLE_LOCAL_VIDEO) { // giả sử máy Bob là máy watching only (điều khiển UAV)
-      const localVideo = document.getElementById(this.userId) as HTMLVideoElement
-      if (!localVideo) {
-        console.log('create local video')
-        const newRemoteStreamElem = document.createElement('video')
-        newRemoteStreamElem.autoplay = true
-        newRemoteStreamElem.srcObject = stream
-        newRemoteStreamElem.id = this.userId
-        document.querySelector('#localStream').appendChild(newRemoteStreamElem)
-      } else {
-        localVideo.srcObject = stream
-      }
-    }
-  }
-
   public async removeTrack(sid: string) {
     if (this.peers[sid] != null) {
       const senders = this.peers[sid].getSenders(); // Get all RTP senders
@@ -212,5 +183,11 @@ export class WebRTCService {
       const videoElement = document.getElementById(sid);
       if (videoElement) videoElement.remove();
     }
+  }
+
+  private addLocalStream = (stream: any, addLocalVideoCallback: any) => {
+    this.onCall = true
+    this.localStream = stream
+    addLocalVideoCallback(stream, this.userId)
   }
 }
