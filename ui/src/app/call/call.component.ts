@@ -3,15 +3,13 @@ import {ActivatedRoute} from '@angular/router'
 import {FormsModule} from '@angular/forms'
 import {Message} from './Message'
 import {Subscription} from 'rxjs'
-import {DATA_TYPE, MEDIA_TYPE, WebsocketService} from './websocket.service'
+import {DATA_TYPE, WebsocketService} from './websocket.service'
 import {environment} from '../../environments/environment'
+import {WebRTCService} from './webrtc.service';
+import {RoomInfo} from './RoomInfo';
 
-const ENABLE_LOCAL_VIDEO = true
 const VIDEO_CALL_SIGNAL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
 const VIDEO_CALL_ACCEPT = '8a93ca36-1be0-4164-b59b-582467f721e9e'
-export function lw(msg: string) {
-  console.warn(msg)
-}
 
 @Component({
   selector: 'app-call',
@@ -20,21 +18,13 @@ export function lw(msg: string) {
   styleUrls: ['./call.component.css']
 })
 export class CallComponent implements OnInit {
-  roomMaster = false
   isChecked = true
-  onCall = false
 
   data2WaySender: any
   dataChannel: RTCDataChannel | null = null
-
-  meetingId: string
-  userId: string
   message: string
   listMessage: string[] = []
-  // list peerConnection: create new element for each peerId (not my userId)
-  peers = {}
-  pendingCandidates = {}
-  localStream: MediaStream
+
   // líst
   /** FOR WebSocket */
   websocketMess: string
@@ -45,6 +35,9 @@ export class CallComponent implements OnInit {
   private config: RTCConfiguration = {
     iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
   }
+  private videoCallSvc: WebRTCService
+  private roomInfo: RoomInfo;
+
   constructor(
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
@@ -82,15 +75,16 @@ export class CallComponent implements OnInit {
     // INIT WebRTC
 
     // start the call
-    this.meetingId = this.route.snapshot.paramMap.get('meetingId')
-    this.userId = this.route.snapshot.paramMap.get('userId')
+    this.roomInfo = new RoomInfo()
+    this.roomInfo.roomId = this.route.snapshot.paramMap.get('meetingId')
+    this.roomInfo.userId = this.route.snapshot.paramMap.get('userId')
   }
 
   ngOnDestroy(): void {
     this.callBtnState = false
     this.msgSubscription?.unsubscribe()
     this.websocketSvc.close()
-    this.hangup()
+    this.videoCallSvc.hangup()
   }
 
   /**
@@ -100,7 +94,7 @@ export class CallComponent implements OnInit {
    */
   connectWebsocket() {
     // INIT WebSocket - Auto connect to server
-    this.websocketSvc.connect(this.meetingId, this.userId)
+    this.websocketSvc.connect(this.roomInfo.roomId, this.roomInfo.userId)
     this.msgSubscription = this.websocketSvc.getMessages().subscribe((message) => {
       if (message && !message.status) { // received message from peers
         this.handleSignalingData(message).then()
@@ -122,9 +116,9 @@ export class CallComponent implements OnInit {
    */
   sendWsMessage() {
     const data: Message = {
-      from: this.userId,
+      from: this.roomInfo.userId,
       msg: this.websocketMess,
-      roomId: this.meetingId
+      roomId: this.roomInfo.roomId
     }
     this.websocketSvc.sendMessage(data)
     this.wsMessages.push(data)
@@ -139,7 +133,7 @@ export class CallComponent implements OnInit {
       const msg = text || this.message
       const payload: Message = {
         msg: msg === 'video' ? VIDEO_CALL_SIGNAL : msg,
-        from: this.userId
+        from: this.roomInfo.userId
       }
       this.dataChannel.send(JSON.stringify(payload))
       this.listMessage.push('Me:' + msg)
@@ -154,7 +148,14 @@ export class CallComponent implements OnInit {
    */
   private startControlUav() {
     // create data channel
-    this.setupDataChannelConnections().then()
+    this.setupDataChannelConnections().then(() => {
+        // init video call service
+        this.videoCallSvc = new WebRTCService(
+          this.websocketSvc,
+          this.roomInfo
+        )
+      }
+    )
   }
 
   private async handleSignalingData(message: Message) {
@@ -186,7 +187,7 @@ export class CallComponent implements OnInit {
           default:
         }
       else {
-        await this.handleSignalingMediaMsg(data, senderId)
+        await this.videoCallSvc.handleSignalingMediaMsg(data, senderId)
       }
     } catch (e) {
       console.log(e)
@@ -202,7 +203,7 @@ export class CallComponent implements OnInit {
 
     const answerMsg: Message = {
       msg: btoa(JSON.stringify({type: answer.type, sdp: answer})),
-      roomId: this.meetingId
+      roomId: this.roomInfo.roomId
     }
     this.websocketSvc.sendMessage(answerMsg, DATA_TYPE)
   }
@@ -218,7 +219,7 @@ export class CallComponent implements OnInit {
       if (event.candidate) {
         const answerMsg: Message = {
           msg: btoa(JSON.stringify({type: 'candidate', sdp: event.candidate})),
-          roomId: this.meetingId
+          roomId: this.roomInfo.roomId
         }
         this.websocketSvc.sendMessage(answerMsg, DATA_TYPE)
       }
@@ -254,8 +255,7 @@ export class CallComponent implements OnInit {
           if (payload.msg === VIDEO_CALL_SIGNAL) {
             this.sendMsg(VIDEO_CALL_ACCEPT) // accept for video call
           } else if (payload.msg === VIDEO_CALL_ACCEPT) {
-            this.roomMaster = true
-            this.startVideoCall(payload.from).then()
+            this.videoCallSvc.startVideoCall(payload.from).then()
           }
         } catch (e) {
           console.log(e)
@@ -270,7 +270,7 @@ export class CallComponent implements OnInit {
       console.log(new Date() + ' data2WaySender.createOffer')
       const data: Message = {
         msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
-        roomId: this.meetingId
+        roomId: this.roomInfo.roomId
       }
       // sending offer, TODO: check ws ready state to send, else addEventListener `open` event to send offer
       this.websocketSvc.sendMessage(data, DATA_TYPE)
@@ -287,198 +287,10 @@ export class CallComponent implements OnInit {
 
   // WebRTC methods for media streaming
 
-  /**
-   * Creating data-channel connection p2p after websocket connect for controlling UAV
-   */
-  private async startVideoCall(senderId: any) {
-    // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
-    await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
-      console.log('Stream found')
-      this.addLocalVideoElement(stream)
-    })
-    this.peers[senderId] = await this.init(senderId)
-  }
-
-  private async init(id: any) {
-    lw(`id: ${id}`)
-    const pc = new RTCPeerConnection(this.config)
-    pc.onicecandidate = (e: any) => {
-      console.log('ICE Candidate Event Triggered:', e.candidate)
-      if (e.candidate) {
-        // sending offer to other peers (broadcast)
-        this.websocketSvc.sendMessage({
-          roomId: this.meetingId,
-          msg: btoa(JSON.stringify({type: 'candidate', sdp: e.candidate}))
-        }, MEDIA_TYPE)
-      }
-    }
-
-    // add track
-    pc.ontrack = (event: any) => {
-      console.warn('ontrack event triggered', event)
-      console.log('Streams received:', event.streams)
-
-      if (event.streams.length === 0) {
-        console.error('No streams available in ontrack event')
-        return
-      }
-      let video = document.getElementById(id) as HTMLVideoElement
-      if (!video) {
-        video = document.createElement('video')
-        video.autoplay = true
-        video.srcObject = event.streams[0]
-        video.id = id
-        video.playsInline = true
-        document.querySelector('#remoteStreams').appendChild(video)
-      } else {
-        console.log('Updating existing remote video element')
-        video.srcObject = event.streams[0]
-      }
-    }
-    pc.oniceconnectionstatechange = () => {
-      console.warn('ICE Connection State:', pc.iceConnectionState)
-    }
-
-    pc.onsignalingstatechange = () => {
-      console.warn('Signaling State:', pc.signalingState)
-    }
-
-    // add track
-    this.localStream.getTracks().forEach(track => {
-      pc.addTrack(track, this.localStream)
-    })
-
-    // sending offer to other joiner room
-    if (this.roomMaster) {
-      // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
-      const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
-      this.websocketSvc.sendMessage({
-        roomId: this.meetingId,
-        msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
-      }, MEDIA_TYPE)
-    }
-    return pc
-  }
-
-  /**
-   * Processing message for video peer-connection
-   * @param data payload of websocket message
-   * @param senderId id of sender
-   * @private
-   */
-  private async handleSignalingMediaMsg(data: any, senderId: string) {
-    switch (data.type) {
-      case 'offer':
-        console.log(`callee received offer from peers ${JSON.stringify(data.sdp)}`)
-        // get User media for receiver
-        await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
-          console.log('Stream found')
-          this.addLocalVideoElement(stream)
-        })
-        // create new peer-connection object map with peerId for receive remote video
-        this.peers[senderId] = await this.init(senderId)
-        await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(data.sdp))
-        // we create an answer for send it back to other peers
-        const answer = await this.peers[senderId].createAnswer()
-        // set local SDP for callee
-        await this.peers[senderId].setLocalDescription(answer)
-        // sending sdp local back to caller
-        this.websocketSvc.sendMessage({
-          roomId: this.meetingId,
-          msg: btoa(JSON.stringify({type: answer.type, sdp: answer}))
-        }, MEDIA_TYPE)
-        break
-      case 'answer':
-        console.log(`answer: ${JSON.stringify(data.sdp)}`)
-        if (this.peers[senderId].signalingState !== 'closed') {
-          await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(data.sdp))
-        }
-        break
-      case 'candidate':
-        console.log(`candidate: ${JSON.stringify(data.sdp)}`)
-        await this.peers[senderId].addIceCandidate(new RTCIceCandidate(data.sdp))
-        break
-      case 'removeTrack':
-        await this.removeTrack(senderId)
-        break
-      default:
-    }
-  }
-
-  hangup() {
-    // this.peers[this.peerId].close()
-    this.onCall = false
-  }
-
   toggleVideoCall(event: any) {
     this.isChecked = event.target.checked
-    if (this.onCall) {
-      this.toggleMediaCall(this.isChecked).then()
-    }
-  }
-
-  private async toggleMediaCall(enable: boolean) {
-    if (!enable) {
-      console.log('Disabling video call');
-      // 🔥 Notify other peers that media is stopped
-      this.websocketSvc.sendMessage({
-        roomId: this.meetingId,
-        msg: btoa(JSON.stringify({type: 'removeTrack', sid: this.userId}))
-      }, MEDIA_TYPE);
-    } else {
-      const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false})
-      this.addLocalVideoElement(localStream)
-      for (const track of localStream.getTracks()) {
-        for (const sid in this.peers) {
-          if (Object.prototype.hasOwnProperty.call(this.peers, sid)) {
-            this.peers[sid].addTrack(track, localStream)
-            // Renegotiate the connection to update media
-            const offer = await this.peers[sid].createOffer()
-            await this.peers[sid].setLocalDescription(offer)
-            this.websocketSvc.sendMessage({
-              roomId: this.meetingId,
-              msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
-            }, MEDIA_TYPE)
-          }
-        }
-      }
-      console.log('Local media resuming')
-    }
-  }
-
-  addLocalVideoElement = (stream: any) => {
-    this.onCall = true
-    this.localStream = stream
-    if (ENABLE_LOCAL_VIDEO) { // giả sử máy Bob là máy watching only (điều khiển UAV)
-      const localVideo = document.getElementById(this.userId) as HTMLVideoElement
-      if (!localVideo) {
-        console.log('create local video')
-        const newRemoteStreamElem = document.createElement('video')
-        newRemoteStreamElem.autoplay = true
-        newRemoteStreamElem.srcObject = stream
-        newRemoteStreamElem.id = this.userId
-        document.querySelector('#localStream').appendChild(newRemoteStreamElem)
-      } else {
-        localVideo.srcObject = stream
-      }
-    }
-  }
-
-  private async removeTrack(sid: string) {
-    if (this.peers[sid] != null) {
-      const senders = this.peers[sid].getSenders(); // Get all RTP senders
-
-      for (const sender of senders) {
-        if (sender.track) {
-          sender.track.stop(); // Stop the media track
-          await this.peers[sid].removeTrack(sender); // Remove the track from the peer connection
-        }
-      }
-
-      // Remove video element
-      const videoElement = document.getElementById(sid);
-      if (videoElement) videoElement.remove();
+    if (this.videoCallSvc.onCall) {
+      this.videoCallSvc.toggleMediaCall(this.isChecked).then()
     }
   }
 }

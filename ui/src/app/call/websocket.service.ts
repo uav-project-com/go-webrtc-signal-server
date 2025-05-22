@@ -49,11 +49,12 @@ export class WebsocketService {
     this.socket$?.next(message);
     let log = null
     try {
-      message.msg = atob(message.msg)
-      log = JSON.stringify(message)
+      const msg = atob(message.msg)
+      log = JSON.stringify(msg)
       console.log(`ws sending: ${log}`)
     } catch (e) {
-      console.error(e)
+      console.log(`ws sending: ${message.msg}`)
+      console.log(e)
     }
   }
 
