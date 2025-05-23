@@ -3,7 +3,9 @@
 // The list of file replacements can be found in `angular.json`.
 
 export const environment = {
-  production: false
+  production: false,
+  socket: 'ws://192.168.1.9:8080/ws',
+  debug: 'log'
 };
 
 /*

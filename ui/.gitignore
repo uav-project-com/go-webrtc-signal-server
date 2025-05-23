@@ -45,3 +45,6 @@ testem.log
 .DS_Store
 Thumbs.db
 /.angular
+/go-client/.idea/workspace.xml
+/go-client/.idea/modules.xml
+/go-client/.idea/go-client.iml

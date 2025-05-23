@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebRTC Room</title>
+</head>
+<body>
+<h2>WebRTC Room</h2>
+<video id="localVideo" autoplay muted playsinline></video>
+<video id="remoteVideo" autoplay playsinline></video>
+<script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+<script>
+  const socket = io();
+
+  const room = new URLSearchParams(window.location.search).get('room') || 'default';
+  console.log(`Joining room: ${room}`);
+
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  let localStream;
+  let peerConnection;
+
+  const config = {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  };
+
+  // 1. Get local media
+  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            localStream = stream;
+            localVideo.srcObject = stream;
+            console.log('Got local media stream');
+            socket.emit('join', room);
+          })
+          .catch(error => {
+            console.error('Failed to get local stream:', error);
+          });
+
+  // 2. Signaling responses
+  socket.on('created', () => {
+    console.log('Room created, waiting for peer...');
+  });
+
+  socket.on('joined', () => {
+    console.log('Joined room, waiting for offer...');
+  });
+
+  socket.on('ready', () => {
+    console.log('Second peer joined. Ready to start call.');
+    startPeer(true); // caller
+  });
+
+  socket.on('signal', async (data) => {
+    if (data.type === 'offer') {
+      console.log('Received offer');
+      startPeer(false); // callee
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      console.log('Sending answer');
+      socket.emit('signal', { room, data: peerConnection.localDescription });
+
+    } else if (data.type === 'answer') {
+      console.log('Received answer');
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
+
+    } else if (data.candidate) {
+      console.log('Received ICE candidate');
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data));
+      } catch (e) {
+        console.error('Error adding ICE candidate:', e);
+      }
+    }
+  });
+
+  function startPeer(isCaller) {
+    console.log('Starting peer connection. Caller:', isCaller);
+    peerConnection = new RTCPeerConnection(config);
+
+    peerConnection.onicecandidate = event => {
+      if (event.candidate) {
+        console.log('Sending ICE candidate');
+        socket.emit('signal', { room, data: event.candidate });
+      }
+    };
+
+    peerConnection.ontrack = event => {
+      console.log('Received remote track');
+      remoteVideo.srcObject = event.streams[0];
+    };
+
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log('ICE connection state:', peerConnection.iceConnectionState);
+    };
+
+    localStream.getTracks().forEach(track => {
+      peerConnection.addTrack(track, localStream);
+    });
+
+    if (isCaller) {
+      peerConnection.createOffer()
+              .then(offer => peerConnection.setLocalDescription(offer))
+              .then(() => {
+                console.log('Sending offer');
+                socket.emit('signal', { room, data: peerConnection.localDescription });
+              })
+              .catch(err => console.error('Failed to create offer:', err));
+    }
+  }
+</script>
+</body>
+</html>
