@@ -21,7 +21,7 @@
 go.work
 go.work.sum
 /.idea/vcs.xml
-examples/data-channel/node_modules/
+docs/data-channel/node_modules/
 /.idea/inspectionProfiles/Project_Default.xml
 /.idea/go-webrtc-signal-server.iml
 /.idea/modules.xml
