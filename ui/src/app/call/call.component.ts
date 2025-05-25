@@ -116,6 +116,7 @@ export class CallComponent implements OnInit {
           if (message.channel === DATA_TYPE) {
             this.dataChannelSvc.handleSignalingData(message).then((_: any) => {})
           } else if (message.channel === MEDIA_TYPE) {
+            // TODO: xử lý input `message` thay vì `data + senderId
             this.videoCallSvc.handleSignalingMediaMsg(data, senderId, this.addRemoteVideoElement, this.addLocalVideoElement)
               .then(_ => {})
           } else {

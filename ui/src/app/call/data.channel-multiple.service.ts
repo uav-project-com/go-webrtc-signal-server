@@ -20,8 +20,6 @@ export class DataChannelRTCMultiService {
   private readonly roomId: string;
   private readonly userId: string;
   private callback: CallBackInfo;
-  private setRemoteSdp = false
-  private setLocalSdp = false
 
 
   constructor(private websocketSvc: WebsocketService, room: RoomInfo, callback: CallBackInfo) {
@@ -52,7 +50,7 @@ export class DataChannelRTCMultiService {
   /**
    * Init webrtc streaming from Raspi5 Client (Bob) and Android control Device (Alice)
    */
-  private async setupDataChannelConnections(sid: string) {
+  private async setupDataChannelConnections(sid: string, isOffer?: boolean) {
     console.warn(new Date())
     console.warn(`setup data channel for ${sid}`)
     // Unlike video, DataChannel requires a bidirectional connection:
@@ -71,7 +69,6 @@ export class DataChannelRTCMultiService {
 
     // // Handle incoming DataChannel from remote peer `sid`
     peer.ondatachannel = (event: { channel: RTCDataChannel }) => {
-      console.error('Creating datachannel 1')
       this.dataChannels[sid] = event.channel // Store the data channel reference
 
       this.dataChannels[sid].onmessage = (messageEvent: any) => {
@@ -85,29 +82,26 @@ export class DataChannelRTCMultiService {
     }
 
     console.warn(`before create offer, userId: ${this.userId}, sid: ${sid}`)
-    // Assume We are the first one join to room, so let create that room: Create sender's data channel
-    console.error('Creating datachannel 2')
-    this.dataChannels[sid] = peer.createDataChannel('chat')
-    this.dataChannels[sid].onmessage = (event: any) => {
-      this.handleDataMessage(event);
-    }
-    // Creating webrtc datachannel connection FIRST for control UAV, Video stream and other will be init later
-    // sending offer info to other peerIde
-    peer.createOffer().then(async (offer: any) => {
-      if (!this.setRemoteSdp && !this.setLocalSdp) {
+    if (!isOffer) { // nếu 2 bên chưa gửi offer, chiếm lấy việc gửi offer ngay tức thì
+      // Assume We are the first one join to room, so let create that room: Create sender's data channel
+      this.dataChannels[sid] = peer.createDataChannel('chat')
+      this.dataChannels[sid].onmessage = (event: any) => {
+        this.handleDataMessage(event);
+      }
+      // Creating webrtc datachannel connection FIRST for control UAV, Video stream and other will be init later
+      // sending offer info to other peerIde
+      peer.createOffer().then(async (offer: any) => {
         await peer.setLocalDescription(offer)
-        this.setLocalSdp = true
-      }
-      // await peer.setLocalDescription(offer)
-      console.warn(new Date() + ` data2WaySender.createOffer ${sid}`)
-      const data: Message = {
-        msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
-        roomId: this.roomId,
-        from: this.userId,
-        to: sid
-      }
-      this.websocketSvc.sendMessage(data, DATA_TYPE)
-    })
+        console.warn(new Date() + ` data2WaySender.createOffer ${sid}`)
+        const data: Message = {
+          msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
+          roomId: this.roomId,
+          from: this.userId,
+          to: sid
+        }
+        this.websocketSvc.sendMessage(data, DATA_TYPE)
+      })
+    }
     peer.addEventListener('connectionstatechange', (_event: any) => {
       console.log('connectionstatechange-state:' + peer.connectionState)
       if (peer.connectionState === 'connected') {
@@ -137,13 +131,17 @@ export class DataChannelRTCMultiService {
     }
   }
 
+  /**
+   * Xử lý tín hiệu message kết nối data-channel qua websocket
+   * @param message msg websocket
+   */
   public async handleSignalingData(message: any) {
     const data = message.msg
     const sid = message.from
     console.warn(`handleSignalingData: ${JSON.stringify(message)} this.peers[sid]: ${this.peers[sid] == null}`)
     if (sid === this.userId) return;
     if (!this.peers[sid]) {
-      await this.setupDataChannelConnections(sid)
+      await this.setupDataChannelConnections(sid, data.type === 'offer')
     }
     switch (data.type) {
       case 'offer':
@@ -152,9 +150,8 @@ export class DataChannelRTCMultiService {
         break
       case 'answer':
         console.log('received msg: answer')
-        if (!this.setRemoteSdp) {
+        if (this.peers[sid].signalingState === 'have-local-offer') {
           await this.peers[sid].setRemoteDescription(new RTCSessionDescription(data.sdp))
-          this.setRemoteSdp = true
         }
         break
       case 'candidate':
@@ -174,13 +171,7 @@ export class DataChannelRTCMultiService {
   private async handlerOfferDataChannel(sid: string, data: any) {
     console.warn(`handler offer from ${sid} with data ${data}`)
     const peer = this.peers[sid]
-    if (!peer) {
-      console.error(`peer ${sid} null`)
-    } else {
-      console.warn(`1 peer is: ${JSON.stringify(peer)}`)
-    }
     await peer.setRemoteDescription(new RTCSessionDescription(data.sdp))
-    this.setRemoteSdp = true
     console.warn(`2 peer is: ${JSON.stringify(peer)}`)
     const answer = await peer.createAnswer()
     await peer.setLocalDescription(answer)
