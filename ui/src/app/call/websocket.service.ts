@@ -41,7 +41,6 @@ export class WebsocketService {
     if (type && type === DATA_TYPE) {
       // dt => data-channel
       message.channel = DATA_TYPE
-      this.socket$?.next(message);
     } else if (type && type === MEDIA_TYPE) {
       // md => media
       message.channel = MEDIA_TYPE
@@ -54,7 +53,8 @@ export class WebsocketService {
       console.log(`ws sending: ${log}`)
     } catch (e) {
       console.log(`ws sending: ${message.msg}`)
-      console.log(e)
+      // tslint:disable-next-line:no-console
+      console.debug(e)
     }
   }
 

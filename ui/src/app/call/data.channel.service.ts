@@ -117,7 +117,8 @@ export class DataChannelRTCService {
     })
 
   }
-  public async handleSignalingData(data: any) {
+  public async handleSignalingData(message: any) {
+    const data = message.data
     switch (data.type) {
       case 'offer':
         console.log('received msg: offer')

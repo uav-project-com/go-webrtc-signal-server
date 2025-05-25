@@ -17,7 +17,8 @@ type Message struct {
 }
 
 type WsResponse struct {
-	Status  int    `json:"status"`
-	Message string `json:"msg"`
-	Time    int64  `json:"time"`
+	Status  int       `json:"status"`
+	Message string    `json:"msg"`
+	Time    int64     `json:"time"`
+	Peers   *[]string `json:"peers,omitempty"` // Server sẽ thêm "from" khi gửi đi
 }

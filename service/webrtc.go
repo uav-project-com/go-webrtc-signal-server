@@ -65,10 +65,26 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 	}
 	// mapping UserID to new Room
 	rooms[req.RoomID][req.UserID] = conn
+
+	// Get the map of users in the specified room
+	var otherUserIDs []string
+	userMap, exists := rooms[req.RoomID]
+	if exists {
+		// Room doesn't exist, return empty slice
+		// Iterate over the user IDs in the room
+		for userID := range userMap {
+			// Exclude the current user ID
+			if userID != req.UserID {
+				otherUserIDs = append(otherUserIDs, userID)
+			}
+		}
+	}
+
 	// echo connected event to user in the first time
 	wsResponse(nil, conn, dto.WsResponse{
 		Status:  http.StatusOK,
 		Message: "onConnected-" + fmt.Sprint(len(rooms[req.RoomID])),
+		Peers:   &otherUserIDs,
 	})
 	mutex.Unlock() // unlock resource
 	log.Printf("[%s] %s joined room %s\n", req.RoomID, req.UserID, req.RoomID)
