@@ -61,7 +61,9 @@ export class DataChannelRTCMultiService {
       if (event.candidate) {
         const answerMsg: Message = {
           msg: btoa(JSON.stringify({type: 'candidate', sdp: event.candidate})),
-          roomId: this.roomId
+          roomId: this.roomId,
+          from: this.userId,
+          to: sid
         }
         this.websocketSvc.sendMessage(answerMsg, DATA_TYPE)
       }
@@ -178,7 +180,9 @@ export class DataChannelRTCMultiService {
     this.peers[sid] = peer
     const answerMsg: Message = {
       msg: btoa(JSON.stringify({type: answer.type, sdp: answer})),
-      roomId: this.roomId
+      roomId: this.roomId,
+      from: this.userId,
+      to: sid
     }
     this.websocketSvc.sendMessage(answerMsg, DATA_TYPE)
   }
