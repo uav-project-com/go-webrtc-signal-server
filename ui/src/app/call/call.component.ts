@@ -7,11 +7,9 @@ import {DATA_TYPE, MEDIA_TYPE, WebsocketService} from './websocket.service'
 import {environment} from '../../environments/environment'
 import {WebRTCService} from './webrtc.service';
 import {CallBackInfo, RoomInfo} from './RoomInfo';
-import {DataChannelRTCService} from './data.channel.service';
 import {DataChannelRTCMultiService} from './data.channel-multiple.service';
 
 const ENABLE_LOCAL_VIDEO = true
-const MULTIPLE_PEERS = true
 const REQUEST_JOIN_DATA_CHANNEL = '4f9ff4f2-6d46-479f-b94a-74e76d012bc2'
 
 @Component({
@@ -35,7 +33,7 @@ export class CallComponent implements OnInit {
   private msgSubscription: Subscription | null = null
 
   // WebRTC services
-  private dataChannelSvc: any;
+  private dataChannelSvc: DataChannelRTCMultiService;
   private videoCallSvc: WebRTCService
   // Room information
   private roomInfo: RoomInfo;
@@ -97,28 +95,28 @@ export class CallComponent implements OnInit {
   connectWebsocket() {
     // INIT WebSocket - Auto connect to server
     this.websocketSvc.connect(this.roomInfo.roomId, this.roomInfo.userId)
-    this.msgSubscription = this.websocketSvc.getMessages().subscribe((message) => {
+    this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
       if (message && !message.status) { // received message from peers
         try {
           if (message.msg === REQUEST_JOIN_DATA_CHANNEL) {
             // create data channel
-            this.dataChannelSvc.setupDataChannelConnections(message.from)
+            this.dataChannelSvc.setupDataChannelConnections(message.from, true)
               .then(() => {
               })
             return
           }
           // Trying to parse Webrtc messages
           const data = JSON.parse(atob(message.msg))
-          const senderId = message.from
           const channel = message.channel
           message.msg = data
           console.log(`Received msg: ${JSON.stringify(message)} with channel ${channel}`)
-          if (message.channel === DATA_TYPE) {
-            this.dataChannelSvc.handleSignalingData(message).then((_: any) => {})
-          } else if (message.channel === MEDIA_TYPE) {
-            // TODO: xử lý input `message` thay vì `data + senderId
-            this.videoCallSvc.handleSignalingMediaMsg(data, senderId, this.addRemoteVideoElement, this.addLocalVideoElement)
-              .then(_ => {})
+          if (channel === DATA_TYPE) {
+            this.dataChannelSvc.handleSignalingData(message).then((_: any) => {
+            })
+          } else if (channel === MEDIA_TYPE) {
+            this.videoCallSvc.handleSignalingMediaMsg(message, this.addRemoteVideoElement, this.addLocalVideoElement)
+              .then(_ => {
+              })
           } else {
             this.wsMessages.push(message)
           }
@@ -130,6 +128,10 @@ export class CallComponent implements OnInit {
         console.log(`response: ${JSON.stringify(message)}`)
         if (message.status === 200 && message.msg.startsWith('onConnected')) {
           console.log('====-Websocket connected! Start to data-channel connection-===')
+          // websocket is ok now, start to init objects Webrtc
+          await this.startControlUav().then(_ => {
+            this.callBtnState = true
+          })
           // send broadcast to talk with each other I am joining
           const data: Message = {
             from: this.roomInfo.userId,
@@ -137,10 +139,6 @@ export class CallComponent implements OnInit {
             roomId: this.roomInfo.roomId
           }
           this.websocketSvc.sendMessage(data)
-          // websocket is ok now, start to call Webrtc
-          this.startControlUav().then(_ => {
-            this.callBtnState = true
-          })
         }
       }
     })
@@ -176,16 +174,12 @@ export class CallComponent implements OnInit {
    * Creating data-channel connection p2p after websocket connect for controlling UAV
    */
   private async startControlUav() {
-    if (MULTIPLE_PEERS) {
-      const callback: CallBackInfo = {
-        context: this,
-        uiControlCallback: this.pushMessageDatachannelCallback,
-        videoHandlerCallback: this.startVideoCallBack
-      }
-      this.dataChannelSvc = new DataChannelRTCMultiService(this.websocketSvc, this.roomInfo, callback)
-    } else {
-      this.dataChannelSvc = new DataChannelRTCService(this.websocketSvc, this.roomInfo)
+    const callback: CallBackInfo = {
+      context: this,
+      uiControlCallback: this.pushMessageDatachannelCallback,
+      videoHandlerCallback: this.startVideoCallBack
     }
+    this.dataChannelSvc = new DataChannelRTCMultiService(this.websocketSvc, this.roomInfo, callback)
     // init video call service
     this.videoCallSvc = new WebRTCService(this.websocketSvc,this.roomInfo)
   }
@@ -210,9 +204,10 @@ export class CallComponent implements OnInit {
    * Callback start video call when data-channel send command 'video'
    * @param context `this` pointer
    * @param from from userId
+   * @param isCaller set the fist one started video call
    */
-  async startVideoCallBack(context: any, from: string) {
-    context.videoCallSvc.startVideoCall(from, context.addRemoteVideoElement, context.addLocalVideoElement).then()
+  async startVideoCallBack(context: any, isCaller: boolean, from: string) {
+    await context.videoCallSvc.startVideoCall(from, isCaller, context.addRemoteVideoElement, context.addLocalVideoElement)
   }
 
   /**

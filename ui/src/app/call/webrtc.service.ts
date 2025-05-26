@@ -22,7 +22,7 @@ export class WebRTCService {
     this.userId = room.userId
   }
 
-  public async initPeerConnection(id: string, setRemoteStreamCallback: any) {
+  public async initPeerConnection(id: string, addRemoteVideoCallback: any) {
     console.warn(`id: ${id}`)
     const pc = new RTCPeerConnection(this.config)
     pc.onicecandidate = (e: any) => {
@@ -30,6 +30,8 @@ export class WebRTCService {
       if (e.candidate) {
         // sending offer to other peers (broadcast)
         this.websocketSvc.sendMessage({
+          from: this.userId,
+          to: id,
           roomId: this.roomId,
           msg: btoa(JSON.stringify({type: 'candidate', sdp: e.candidate}))
         }, MEDIA_TYPE)
@@ -45,7 +47,7 @@ export class WebRTCService {
         console.error('No streams available in ontrack event')
         return
       }
-      setRemoteStreamCallback(event.streams[0], id)
+      addRemoteVideoCallback(event.streams[0], id)
     }
     pc.oniceconnectionstatechange = () => {
       console.warn('ICE Connection State:', pc.iceConnectionState)
@@ -64,44 +66,52 @@ export class WebRTCService {
 
   /**
    * Creating data-channel connection p2p after websocket connect for controlling UAV
+   * @param senderId sender websocket
+   * @param isCaller caller
+   * @param addLocalVideoCallback callback to UI local video
+   * @param addRemoteVideoCallback callback to UI remote video
    */
-  public async startVideoCall(senderId: any, addRemoteVideoCallback: any, addLocalVideoCallback: any) {
+  public async startVideoCall(senderId: any, isCaller: boolean, addRemoteVideoCallback: any, addLocalVideoCallback: any) {
+    console.warn(`Start video call with master: ${isCaller}`)
     // only call when local init RTCPeerConnection, disable local video => ko chạy đoạn code if này
     await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
       console.log('Stream found')
       this.addLocalStream(stream, addLocalVideoCallback)
     })
-    this.peers[senderId] = await this.initPeerConnection(senderId, addRemoteVideoCallback)
-    // sending offer to other joiner room
-    // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
-    const offer = await this.peers[senderId].createOffer()
-    await this.peers[senderId].setLocalDescription(offer)
-    this.websocketSvc.sendMessage({
-      roomId: this.roomId,
-      msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
-    }, MEDIA_TYPE)
-    await this.addPendingCandidates(senderId)
+    const peer = await this.initPeerConnection(senderId, addRemoteVideoCallback)
+    if (isCaller) { // chiếm quyền call offer
+      // sending offer to other joiner room
+      // The caller creates an offer and sets it as its local description before sending it to the remote peer via WebSocket.
+      const offer = await peer.createOffer()
+      await peer.setLocalDescription(offer)
+      this.websocketSvc.sendMessage({
+        from: this.userId,
+        to: senderId,
+        roomId: this.roomId,
+        msg: btoa(JSON.stringify({type: offer.type, sdp: offer}))
+      }, MEDIA_TYPE)
+    }
+    this.peers[senderId] = peer
   }
 
   /**
    * Processing message for video peer-connection
-   * @param data payload of websocket message
-   * @param senderId id of sender
+   * @param message payload of websocket message
    * @param addRemoteVideoCallback for set remote video stream
    * @param addLocalVideoCallback for set local video stream
    * @private
    */
-  public async handleSignalingMediaMsg(data: any, senderId: string, addRemoteVideoCallback: any, addLocalVideoCallback: any) {
+  public async handleSignalingMediaMsg(message: any, addRemoteVideoCallback: any, addLocalVideoCallback: any) {
+    const data = message.msg
+    const senderId = message.from
+    if (this.peers[senderId] == null && data.type === 'offer') {
+      console.warn(`data.type: ${data.type} sid: ${senderId}`)
+      await this.startVideoCall(senderId, false, addRemoteVideoCallback, addLocalVideoCallback)
+    }
     switch (data.type) {
       case 'offer':
-        console.log(`callee received offer from peers ${JSON.stringify(data.sdp)}`)
-        // get User media for receiver
-        await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(stream => {
-          console.log('Stream found')
-          this.addLocalStream(stream, addLocalVideoCallback)
-        })
+        console.warn(`peer: ${this.peers[senderId] == null} sid: ${senderId}`)
         // create new peer-connection object map with peerId for receive remote video
-        this.peers[senderId] = await this.initPeerConnection(senderId, addRemoteVideoCallback)
         await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(data.sdp))
         // we create an answer for send it back to other peers
         const answer = await this.peers[senderId].createAnswer()
@@ -109,6 +119,8 @@ export class WebRTCService {
         await this.peers[senderId].setLocalDescription(answer)
         // sending sdp local back to caller
         this.websocketSvc.sendMessage({
+          from: this.userId,
+          to: senderId,
           roomId: this.roomId,
           msg: btoa(JSON.stringify({type: answer.type, sdp: answer}))
         }, MEDIA_TYPE)
@@ -117,13 +129,13 @@ export class WebRTCService {
         break
       case 'answer':
         console.log(`answer: ${JSON.stringify(data.sdp)}`)
-        if (this.peers[senderId].signalingState !== 'closed') {
+        if (this.peers[senderId] && this.peers[senderId].signalingState === 'have-local-offer') {
           await this.peers[senderId].setRemoteDescription(new RTCSessionDescription(data.sdp))
         }
         break
       case 'candidate':
         console.log(`candidate: ${JSON.stringify(data.sdp)}`)
-        if (senderId in this.peers) {
+        if (senderId in this.peers && this.peers[senderId].remoteDescription) {
           await this.peers[senderId].addIceCandidate(new RTCIceCandidate(data.sdp))
         } else {
           if (!(senderId in this.pendingCandidates)) {
@@ -201,6 +213,9 @@ export class WebRTCService {
    * @param sid sender candidate
    */
   private addPendingCandidates = async (sid: string) => {
+    if (!this.peers[sid] || !this.peers[sid].remoteDescription) {
+      return
+    }
     if (sid in this.pendingCandidates) {
       for (const candidate of this.pendingCandidates[sid]) {
         await this.peers[sid].addIceCandidate(new RTCIceCandidate(candidate))

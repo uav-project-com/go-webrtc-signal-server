@@ -3,9 +3,7 @@ import {DATA_TYPE, WebsocketService} from './websocket.service';
 import {CallBackInfo, RoomInfo} from './RoomInfo';
 import {Message} from './Message';
 
-export const VIDEO_CALL_SIGNAL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
-export const VIDEO_CALL_ACCEPT = '8a93ca36-1be0-4164-b59b-582467f721e9e'
-
+export const REQUEST_VIDEO_CALL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
 @Injectable({
   providedIn: 'root'
 })
@@ -32,14 +30,16 @@ export class DataChannelRTCMultiService {
    * Chatting with webrtc Data-channel
    */
   public async sendMsg(message: string) {
-    const payload: Message = {
-      msg: message === 'video' ? VIDEO_CALL_SIGNAL : message,
-      from: this.userId
-    }
-    const str = JSON.stringify(payload);
     // send broadcast to all other peers
     for (const sid in this.dataChannels) {
       if (this.dataChannels[sid].readyState === 'open') {
+        console.warn(`sending video req to ${sid}`)
+        const payload: Message = {
+          msg: message === 'video' ? REQUEST_VIDEO_CALL : message,
+          from: this.userId,
+          to: sid
+        }
+        const str = JSON.stringify(payload);
         console.log(`Sending: ${message} from ${this.userId} to ${sid}`)
         this.dataChannels[sid].send(str)
       }
@@ -50,9 +50,9 @@ export class DataChannelRTCMultiService {
   /**
    * Init webrtc streaming from Raspi5 Client (Bob) and Android control Device (Alice)
    */
-  private async setupDataChannelConnections(sid: string, isOffer?: boolean) {
-    console.warn(new Date())
-    console.warn(`setup data channel for ${sid}`)
+  async setupDataChannelConnections(sid: string, isCaller: boolean) {
+    console.log(new Date())
+    console.log(`setup data channel for ${sid}`)
     // Unlike video, DataChannel requires a bidirectional connection:
     const peer = new RTCPeerConnection(this.config)
     this.peers[sid] = peer
@@ -83,8 +83,8 @@ export class DataChannelRTCMultiService {
       }
     }
 
-    console.warn(`before create offer, userId: ${this.userId}, sid: ${sid}`)
-    if (!isOffer) { // nếu 2 bên chưa gửi offer, chiếm lấy việc gửi offer ngay tức thì
+    console.log(`before create offer, userId: ${this.userId}, sid: ${sid}`)
+    if (isCaller) { // nếu 2 bên chưa gửi offer, chiếm lấy việc gửi offer ngay tức thì
       // Assume We are the first one join to room, so let create that room: Create sender's data channel
       this.dataChannels[sid] = peer.createDataChannel('chat')
       this.dataChannels[sid].onmessage = (event: any) => {
@@ -94,7 +94,7 @@ export class DataChannelRTCMultiService {
       // sending offer info to other peerIde
       peer.createOffer().then(async (offer: any) => {
         await peer.setLocalDescription(offer)
-        console.warn(new Date() + ` data2WaySender.createOffer ${sid}`)
+        console.log(new Date() + ` data2WaySender.createOffer ${sid}`)
         const data: Message = {
           msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
           roomId: this.roomId,
@@ -120,11 +120,8 @@ export class DataChannelRTCMultiService {
       try {
         const payload: Message = JSON.parse(event.data)
         this.callback.uiControlCallback(context, `${payload.from}: ${payload.msg}`)
-        if (payload.msg === VIDEO_CALL_SIGNAL) {
-          this.sendMsg(VIDEO_CALL_ACCEPT).then(_ => {
-          }) // accept for video call
-        } else if (payload.msg === VIDEO_CALL_ACCEPT) {
-          this.callback.videoHandlerCallback(context, payload.from)
+        if (payload.msg === REQUEST_VIDEO_CALL) {
+          this.callback.videoHandlerCallback(context, true, payload.from)
         }
       } catch (e) {
         this.callback.uiControlCallback(context, event.data)
@@ -140,10 +137,10 @@ export class DataChannelRTCMultiService {
   public async handleSignalingData(message: any) {
     const data = message.msg
     const sid = message.from
-    console.warn(`handleSignalingData: ${JSON.stringify(message)} this.peers[sid]: ${this.peers[sid] == null}`)
+    console.log(`handleSignalingData: ${JSON.stringify(message)} this.peers[sid]: ${this.peers[sid] == null}`)
     if (sid === this.userId) return;
-    if (!this.peers[sid]) {
-      await this.setupDataChannelConnections(sid, data.type === 'offer')
+    if (!this.peers[sid] && data.type === 'offer') {
+      await this.setupDataChannelConnections(sid, false)
     }
     switch (data.type) {
       case 'offer':
@@ -171,10 +168,10 @@ export class DataChannelRTCMultiService {
   }
 
   private async handlerOfferDataChannel(sid: string, data: any) {
-    console.warn(`handler offer from ${sid} with data ${data}`)
+    console.log(`handler offer from ${sid} with data ${data}`)
     const peer = this.peers[sid]
     await peer.setRemoteDescription(new RTCSessionDescription(data.sdp))
-    console.warn(`2 peer is: ${JSON.stringify(peer)}`)
+    console.log(`2 peer is: ${JSON.stringify(peer)}`)
     const answer = await peer.createAnswer()
     await peer.setLocalDescription(answer)
     this.peers[sid] = peer
