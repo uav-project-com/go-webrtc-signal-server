@@ -13,5 +13,8 @@
   "license": "MIT",
   "devDependencies": {
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "core-decorators": "^0.20.0"
   }
 }
