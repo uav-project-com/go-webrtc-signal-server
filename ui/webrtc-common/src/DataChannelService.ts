@@ -1,7 +1,7 @@
 import {SignalMsg, SignalType} from './dto/SignalMsg';
-import {Message} from "../../src/app/call/Message";
-import {REQUEST_VIDEO_CALL} from "../../src/app/call/data.channel-multiple.service";
-import {DATA_TYPE} from "../../src/app/call/websocket.service";
+import {Message} from '../../src/app/call/Message';
+import {REQUEST_VIDEO_CALL} from '../../src/app/call/data.channel-multiple.service';
+import {DATA_TYPE} from '../../src/app/call/websocket.service';
 
 export class DataChannelService extends EventTarget {
 
@@ -20,9 +20,9 @@ export class DataChannelService extends EventTarget {
   // lưu các obj RTCPeerConnection khi cần broadcast message cho nhiều user trong room qua data-channel theo mesh
   private peers: Map<string, RTCPeerConnection> = new Map<string, RTCPeerConnection>()
   // lưu tạm thời các object offer khi mà state của peer chưa ready for offer nhưng lại nhận được offer từ peer khác
-  private pendingCandidates = {}
+  private pendingCandidates: { [sid: string]: any } = {};
   // lưu kênh chat của các peer
-  private dataChannels = new Map<string, RTCDataChannel>()
+  private dataChannels: { [sid: string]: any } = {}
 
 // -----------------PrivateConstructor--------------------------
 
@@ -47,7 +47,7 @@ export class DataChannelService extends EventTarget {
   private onMessage(message: string) {
     // Dispatch custom event
     const event = new CustomEvent('message', {
-      detail: { message }
+      detail: {message}
     });
     this.dispatchEvent(event);
   }
@@ -100,24 +100,25 @@ export class DataChannelService extends EventTarget {
           if (!(sid in this.pendingCandidates)) {
             this.pendingCandidates[sid] = []
           }
-          this.pendingCandidates[sid].push(data.sdp)
+          this.pendingCandidates[sid] = data.sdp
         }
         break
       default:
     }
+  }
 
-    /**
-     * Get candidates from list pending when other peers sent it too early
-     * @param sid sender candidate
-     */
+  /**
+   * Get candidates from list pending when other peers sent it too early
+   * @param sid sender candidate
+   */
   private addPendingCandidates = async (sid: string) => {
-      if (sid in this.pendingCandidates) {
-        for (const candidate of this.pendingCandidates[sid]) {
-          await this.peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate))
-        }
+    if (sid in this.pendingCandidates) {
+      for (const candidate of this.pendingCandidates[sid]) {
+        await this.peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate))
       }
     }
   }
+
 // -----------------Public functions----------------------------
 
   /**
@@ -153,7 +154,7 @@ export class DataChannelService extends EventTarget {
       channel.onopen = () => {
         console.log('DataChannel Open')
       }
-      this.dataChannels.set(sid, channel) // Store the data channel reference
+      this.dataChannels[sid] = channel // Store the data channel reference
     }
 
     console.log(`before create offer, userId: ${this.userId}, sid: ${sid}`)
@@ -192,11 +193,11 @@ export class DataChannelService extends EventTarget {
    */
   public async sendMsg(message: string) {
     // send broadcast to all other peers
-    this.dataChannels.forEach((channel, sid) => {
-      if (channel.readyState === 'open') {
+    Object.entries(this.dataChannels).forEach(([_sid, channel]) => {
+      if (channel && channel.readyState === 'open') {
         channel.send(message)
       }
-    })
+    });
   }
 
 // -----------------Events - callback---------------------------
