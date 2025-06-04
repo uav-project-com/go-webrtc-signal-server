@@ -40,3 +40,22 @@
     <button class="hangup" (click)="hangUp()">📞</button>
   </div>
 </div>
+<!-- Chat Sidebar -->
+<div class="chat-sidebar" [class.open]="chatOpen">
+  <div class="chat-header">
+    <span>Chat</span>
+    <button (click)="toggleChat()">×</button>
+  </div>
+
+  <div class="chat-messages" #chatMessages>
+    <div *ngFor="let msg of messages" [ngClass]="{'me': msg.from === 'me', 'peer': msg.from !== 'me'}" class="message">
+      <span>{{msg.text}}</span>
+    </div>
+  </div>
+
+  <div class="chat-input">
+    <input [(ngModel)]="newMessage" (keydown.enter)="sendMessage()" placeholder="Type a message..." />
+    <button (click)="sendMessage()">Send</button>
+    <button (click)="clearChat()">Clear</button>
+  </div>
+</div>

@@ -1,4 +1,4 @@
-import {SignalMsg, SignalType} from './dto/SignalMsg';
+import {Channel, SignalMsg, SignalType} from './dto/SignalMsg';
 
 export class DataChannelService extends EventTarget {
 
@@ -59,6 +59,7 @@ export class DataChannelService extends EventTarget {
       await peer.setLocalDescription(answer)
       this.peers.set(sid, peer)
       const answerMsg: SignalMsg = {
+        channel: Channel.DataRtc,
         msg: btoa(JSON.stringify({type: answer.type, sdp: answer})),
         roomId: this.roomId,
         from: this.userId,
@@ -132,6 +133,7 @@ export class DataChannelService extends EventTarget {
     peer.onicecandidate = (event: { candidate: any }) => {
       if (event.candidate) {
         const answerMsg: SignalMsg = {
+          channel: Channel.DataRtc,
           msg: btoa(JSON.stringify({type: 'candidate', sdp: event.candidate})),
           roomId: this.roomId,
           from: this.userId,
@@ -169,6 +171,7 @@ export class DataChannelService extends EventTarget {
         await peer.setLocalDescription(offer)
         console.log(new Date() + ` data2WaySender.createOffer ${sid}`)
         const data: SignalMsg = {
+          channel: Channel.DataRtc,
           msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
           roomId: this.roomId,
           from: this.userId,

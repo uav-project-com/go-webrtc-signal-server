@@ -34,6 +34,14 @@ export class WebsocketService {
     }
   }
 
+  send(message: any): void {
+    let convert = message
+    if (typeof message !== 'string') {
+      convert = JSON.stringify(message)
+    }
+    this.socket$?.next(convert);
+  }
+
   sendMessage(message: Message, type?: string): void {
     if (!message.from) {
       message.from = this.defaultSrcId

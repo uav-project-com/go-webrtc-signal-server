@@ -39,7 +39,10 @@ export class HomeComponent {
       alert('Please enter or generate a room ID first.');
       return;
     }
-    this.router.navigate(['/webrtc-v2', this.roomId, this.sid]).then(_ => {})
+    if (!this.sid) {
+      this.getRandomName()
+    }
+    this.router.navigate(['/webrtc-v2', this.roomId, this.sid, true]).then(_ => {})
   }
   // Hàm lấy tên ngẫu nhiên
   private getRandomName(): void {
