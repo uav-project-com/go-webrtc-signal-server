@@ -1,12 +1,12 @@
 import {ChangeDetectorRef, Component, OnInit} from '@angular/core'
 import {ActivatedRoute} from '@angular/router'
 import {FormsModule} from '@angular/forms'
-import {Message} from './Message'
+import {Message} from '../common/Message'
 import {Subscription} from 'rxjs'
-import {DATA_TYPE, MEDIA_TYPE, WebsocketService} from './websocket.service'
+import {DATA_TYPE, MEDIA_TYPE, WebsocketService} from '../common/websocket.service'
 import {environment} from '../../environments/environment'
 import {WebRTCService} from './webrtc.service';
-import {CallBackInfo, RoomInfo} from './RoomInfo';
+import {CallBackInfo, RoomInfo} from '../common/RoomInfo';
 import {DataChannelRTCMultiService} from './data.channel-multiple.service';
 
 const ENABLE_LOCAL_VIDEO = true

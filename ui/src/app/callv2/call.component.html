@@ -1,0 +1,30 @@
+<div class="meeting-container">
+  <div class="top-bar">
+    <button class="back-btn">←</button>
+    <div class="meeting-id">umq-eigo-xsh</div>
+    <button class="speaker-btn">🔊</button>
+  </div>
+
+  <div class="meeting-status">
+    <p>You're the only one here</p>
+    <p>Share this meeting link with others you want in the meeting</p>
+    <div class="meeting-link">
+      <input type="text" value="meet.google.com/umq-eigo-xsh" readonly>
+      <button (click)="copyLink()">📋</button>
+    </div>
+    <button class="invite-btn" (click)="shareInvite()">📤 Share invite</button>
+  </div>
+
+  <div class="video-grid">
+    <video #localVideo autoplay muted playsinline></video>
+    <video #remoteVideo autoplay playsinline></video>
+  </div>
+
+  <div class="controls">
+    <button (click)="toggleCamera()">🎥</button>
+    <button (click)="toggleMic()">🎤</button>
+    <button (click)="openEmoji()">😊</button>
+    <button (click)="openMoreOptions()">⋮</button>
+    <button class="hangup" (click)="hangUp()">📞</button>
+  </div>
+</div>

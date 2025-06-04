@@ -1,7 +1,7 @@
 import {SignalMsg, SignalType} from './dto/SignalMsg';
-import {Message} from '../../src/app/call/Message';
+import {Message} from '../../src/app/common/Message';
 import {REQUEST_VIDEO_CALL} from '../../src/app/call/data.channel-multiple.service';
-import {DATA_TYPE} from '../../src/app/call/websocket.service';
+import {DATA_TYPE} from '../../src/app/common/websocket.service';
 
 export class DataChannelService extends EventTarget {
 

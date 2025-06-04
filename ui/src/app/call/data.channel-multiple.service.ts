@@ -1,7 +1,7 @@
 import {Injectable} from '@angular/core';
-import {DATA_TYPE, WebsocketService} from './websocket.service';
-import {CallBackInfo, RoomInfo} from './RoomInfo';
-import {Message} from './Message';
+import {DATA_TYPE, WebsocketService} from '../common/websocket.service';
+import {CallBackInfo, RoomInfo} from '../common/RoomInfo';
+import {Message} from '../common/Message';
 
 export const REQUEST_VIDEO_CALL = '38ce19fc-651f-4cf0-8c20-b23db23a894e'
 @Injectable({
