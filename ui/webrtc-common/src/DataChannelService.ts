@@ -1,7 +1,4 @@
 import {SignalMsg, SignalType} from './dto/SignalMsg';
-import {Message} from '../../src/app/common/Message';
-import {REQUEST_VIDEO_CALL} from '../../src/app/call/data.channel-multiple.service';
-import {DATA_TYPE} from '../../src/app/common/websocket.service';
 
 export class DataChannelService extends EventTarget {
 
@@ -61,7 +58,7 @@ export class DataChannelService extends EventTarget {
       const answer = await peer.createAnswer()
       await peer.setLocalDescription(answer)
       this.peers.set(sid, peer)
-      const answerMsg: Message = {
+      const answerMsg: SignalMsg = {
         msg: btoa(JSON.stringify({type: answer.type, sdp: answer})),
         roomId: this.roomId,
         from: this.userId,
