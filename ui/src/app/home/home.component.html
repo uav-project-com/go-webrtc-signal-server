@@ -1,0 +1,29 @@
+<a class="nav-link" href="/">🏠</a>
+<br/>
+<a class="nav-link" href="/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=1">Call via Alice</a>
+<br/>
+<a class="nav-link" href="/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=2">Call via Bob</a>
+<br/>
+<a class="nav-link" href="/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=3">Call via Joe</a>
+<br/>
+<a class="nav-link" href="/call;meetingId=07927fc8-af0a-11ea-b338-064f26a5f90a;userId=4">Call via Yến Vy</a>
+<br/>
+
+<hr/>
+<h2>Demo self lib version 2.0</h2>
+<div class="home-container">
+  <h1>Join a Room</h1>
+  <label for="roomId">Current User name: {{ sid }}</label>
+  <input
+    id="roomId"
+    type="text"
+    [(ngModel)]="roomId"
+    placeholder="Enter or generate room ID"
+    class="room-input"
+  />
+
+  <div class="buttons">
+    <button (click)="generateRoom()">🔄 Generate Room</button>
+    <button (click)="joinRoom()">🚪 Join</button>
+  </div>
+</div>
