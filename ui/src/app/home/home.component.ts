@@ -19,8 +19,6 @@ const names: string[] = [
   styleUrls: ['./home.component.css']
 })
 export class HomeComponent {
-
-  isDisplay = true
   roomId = '';
   sid = ''
 
@@ -41,7 +39,6 @@ export class HomeComponent {
       alert('Please enter or generate a room ID first.');
       return;
     }
-    this.isDisplay = false
     this.router.navigate(['/webrtc-v2', this.roomId, this.sid]).then(_ => {})
   }
   // Hàm lấy tên ngẫu nhiên

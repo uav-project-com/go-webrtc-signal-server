@@ -1,25 +1,31 @@
 import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
+import {NgForOf, NgIf} from '@angular/common';
 
 @Component({
   selector: 'app-call',
   templateUrl: './call.component.html',
+  imports: [
+    NgForOf,
+    NgIf
+  ],
   styleUrls: ['./call.component.css']
 })
 export class CallComponentV2 implements OnInit {
-  isDisplay = false
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   remoteUsers: string[] = ['user1', 'user2']; // dummy IDs
   isMinimized = false;
   stream!: MediaStream;
 
   roomId = '';
+  joinLink = ''
   sid = '';
   constructor(private route: ActivatedRoute) {}
 
   ngOnInit(): void {
     this.roomId = this.route.snapshot.paramMap.get('roomId') || '';
     this.sid = this.route.snapshot.paramMap.get('sid') || '';
+    this.joinLink = `${window.location.origin}/${this.roomId}`;
     console.log('Room ID:', this.roomId);
     console.log('Session/User ID (sid):', this.sid);
   }
@@ -46,11 +52,11 @@ export class CallComponentV2 implements OnInit {
   }
 
   copyLink() {
-    navigator.clipboard.writeText('https://meet.google.com/umq-eigo-xsh').then(_ => {});
+    navigator.clipboard.writeText(this.joinLink).then(_ => {});
   }
 
   shareInvite() {
-    window.open('mailto:?subject=Join my meeting&body=Click to join: https://meet.google.com/umq-eigo-xsh');
+    window.open('mailto:?subject=Join my meeting&body=Click to join: ' + this.joinLink);
   }
 
   minimizeSelf() {
@@ -61,8 +67,11 @@ export class CallComponentV2 implements OnInit {
     this.isMinimized = false;
   }
 
-  openEmoji() {
-    alert('Emoji menu coming soon!');
+  /**
+   * Chat example via data-channel
+   */
+  openChat() {
+    alert('Chat menu coming soon!');
   }
 
   openMoreOptions() {

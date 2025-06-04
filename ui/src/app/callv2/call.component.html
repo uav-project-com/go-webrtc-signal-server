@@ -2,7 +2,7 @@
   <!-- Top Bar -->
   <div class="top-bar">
     <button class="back-btn">←</button>
-    <div class="meeting-id">umq-eigo-xsh</div>
+    <div class="meeting-id">{{sid}} joined room: {{roomId}}</div>
     <button class="speaker-btn">🔊</button>
   </div>
 
@@ -11,7 +11,7 @@
     <p>You're the only one here</p>
     <p>Share this meeting link with others you want in the meeting</p>
     <div class="meeting-link">
-      <input type="text" value="meet.google.com/umq-eigo-xsh" readonly>
+      <input type="text" [value]="joinLink" readonly>
       <button (click)="copyLink()">📋</button>
     </div>
     <button class="invite-btn" (click)="shareInvite()">📤 Share invite</button>
@@ -35,7 +35,7 @@
   <div class="controls">
     <button (click)="toggleCamera()">🎥</button>
     <button (click)="toggleMic()">🎤</button>
-    <button (click)="openEmoji()">😊</button>
+    <button (click)="openChat()">✉</button>
     <button (click)="openMoreOptions()">⋮</button>
     <button class="hangup" (click)="hangUp()">📞</button>
   </div>
