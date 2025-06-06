@@ -35,11 +35,7 @@ export class WebsocketService {
   }
 
   send(message: any): void {
-    let convert = message
-    if (typeof message !== 'string') {
-      convert = JSON.stringify(message)
-    }
-    this.socket$?.next(convert);
+    this.socket$?.next(message);
   }
 
   sendMessage(message: Message, type?: string): void {

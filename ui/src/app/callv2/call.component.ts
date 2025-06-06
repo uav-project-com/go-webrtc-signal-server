@@ -6,6 +6,7 @@ import {DataChannelService, REQUEST_JOIN_DATA_CHANNEL, REQUEST_JOIN_MEDIA_CHANNE
 import {WebsocketService} from '../common/websocket.service';
 import {Subscription} from 'rxjs';
 import {Channel, SignalMsg} from 'webrtc-common/dist/dto/SignalMsg';
+import {HomeComponent} from '../home/home.component';
 
 @Component({
   selector: 'app-call',
@@ -27,7 +28,7 @@ export class CallComponentV2 implements OnInit {
   roomId = '';
   joinLink = ''
   sid = '';
-  isJoiner = false
+  isMaster = 'false'
 
   chatOpen = false;
   newMessage = '';
@@ -42,8 +43,12 @@ export class CallComponentV2 implements OnInit {
   ngOnInit(): void {
     this.roomId = this.route.snapshot.paramMap.get('roomId') || '';
     this.sid = this.route.snapshot.paramMap.get('sid') || '';
-    this.joinLink = `${window.location.origin}/${this.roomId}`;
-    this.isJoiner = Boolean(this.route.snapshot.paramMap.get('isJoiner') || false);
+    if (!this.sid) {
+      this.sid = HomeComponent.randomName()
+      console.log(`auto gen username: ${this.sid}`)
+    }
+    this.isMaster = this.route.snapshot.paramMap.get('isMaster') || 'false'
+    this.joinLink = `${window.location.origin}/webrtc-v2/${this.roomId}`;
     console.log('Room ID:', this.roomId);
     console.log('Session/User ID (sid):', this.sid);
     // init websocket signaling client
@@ -155,7 +160,7 @@ export class CallComponentV2 implements OnInit {
         this.websocketSvc.send
       )
       // sending broadcast request to join data-channel
-      if (this.isJoiner) {
+      if (this.isMaster === 'false') {
         const msg: SignalMsg = {
           msg: REQUEST_JOIN_DATA_CHANNEL,
           roomId: this.roomId,
@@ -202,5 +207,9 @@ export class CallComponentV2 implements OnInit {
           // TODO implement it
         }
     }
+  }
+
+  goHome() {
+    window.location.href = '/'
   }
 }

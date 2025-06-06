@@ -15,7 +15,7 @@ export class DataChannelService extends EventTarget {
   private readonly sendSignaling: any
 
   // lưu các obj RTCPeerConnection khi cần broadcast message cho nhiều user trong room qua data-channel theo mesh
-  private peers: Map<string, RTCPeerConnection> = new Map<string, RTCPeerConnection>()
+  private peers: { [sid: string]: any } = {};
   // lưu tạm thời các object offer khi mà state của peer chưa ready for offer nhưng lại nhận được offer từ peer khác
   private pendingCandidates: { [sid: string]: any } = {};
   // lưu kênh chat của các peer
@@ -51,13 +51,13 @@ export class DataChannelService extends EventTarget {
 
   private async handlerOfferDataChannel(sid: string, data: any) {
     console.log(`handler offer from ${sid} with data ${data}`)
-    const peer = this.peers.get(sid)
+    const peer = this.peers[sid]
     if (peer) {
       await peer.setRemoteDescription(new RTCSessionDescription(data.sdp))
       console.log(`2 peer is: ${JSON.stringify(peer)}`)
       const answer = await peer.createAnswer()
       await peer.setLocalDescription(answer)
-      this.peers.set(sid, peer)
+      this.peers[sid] = peer
       const answerMsg: SignalMsg = {
         channel: Channel.DataRtc,
         msg: btoa(JSON.stringify({type: answer.type, sdp: answer})),
@@ -77,7 +77,7 @@ export class DataChannelService extends EventTarget {
     const data = message.msg
     const sid = message.from
     if (sid === this.userId) return;
-    if (!this.peers.get(sid) && data.type === SignalType.offer) {
+    if (!this.peers[sid] && data.type === SignalType.offer) {
       await this.createDataChannelConnection(sid, false)
     }
     switch (data.type) {
@@ -87,13 +87,13 @@ export class DataChannelService extends EventTarget {
         break
       case SignalType.answer:
         console.log('received msg: answer')
-        if (this.peers.get(sid)?.signalingState === 'have-local-offer') {
-          await this.peers.get(sid)?.setRemoteDescription(new RTCSessionDescription(data.sdp))
+        if (this.peers[sid]?.signalingState === 'have-local-offer') {
+          await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp))
         }
         break
       case SignalType.candidate:
-        if (this.peers.has(sid) && this.peers.get(sid)?.remoteDescription) {
-          await this.peers.get(sid)?.addIceCandidate(new RTCIceCandidate(data.sdp))
+        if (this.peers.has(sid) && this.peers[sid]?.remoteDescription) {
+          await this.peers[sid]?.addIceCandidate(new RTCIceCandidate(data.sdp))
         } else {
           if (!(sid in this.pendingCandidates)) {
             this.pendingCandidates[sid] = []
@@ -112,7 +112,7 @@ export class DataChannelService extends EventTarget {
   private addPendingCandidates = async (sid: string) => {
     if (sid in this.pendingCandidates) {
       for (const candidate of this.pendingCandidates[sid]) {
-        await this.peers.get(sid)?.addIceCandidate(new RTCIceCandidate(candidate))
+        await this.peers[sid]?.addIceCandidate(new RTCIceCandidate(candidate))
       }
     }
   }
@@ -128,7 +128,7 @@ export class DataChannelService extends EventTarget {
     console.log(`setup data channel for ${sid}`)
     // Unlike video, DataChannel requires a bidirectional connection:
     const peer = new RTCPeerConnection(this.config)
-    this.peers.set(sid, peer)
+    this.peers[sid] = peer
     // candidate event
     peer.onicecandidate = (event: { candidate: any }) => {
       if (event.candidate) {
@@ -163,7 +163,7 @@ export class DataChannelService extends EventTarget {
       channel.onmessage = (event: any) => {
         this.onMessage(event);
       }
-      this.dataChannels.set(sid, channel)
+      this.dataChannels[sid] = channel
 
       // Creating webrtc datachannel connection FIRST for control UAV, Video stream and other will be init later
       // sending offer info to other peerIde

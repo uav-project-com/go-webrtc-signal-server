@@ -19,12 +19,22 @@ const names: string[] = [
   styleUrls: ['./home.component.css']
 })
 export class HomeComponent {
-  roomId = '';
-  sid = ''
 
   constructor(private router: Router) {
     console.log('Base websocket :' + environment.socket +
       ' production? ' + environment.production);
+  }
+  roomId = '';
+  sid = ''
+  isMaster = false
+  // Hàm lấy tên ngẫu nhiên
+  public static randomName(): string {
+    const randomIndex = Math.floor(Math.random() * names.length);
+    return names[randomIndex];
+  }
+  private getRandomName() {
+    const randomIndex = Math.floor(Math.random() * names.length);
+    this.sid = names[randomIndex];
   }
 
   generateRoom() {
@@ -32,6 +42,7 @@ export class HomeComponent {
     this.roomId = raw.match(/.{1,3}/g)?.join('-') || raw;
     this.roomId = this.roomId.toUpperCase()
     this.getRandomName();
+    this.isMaster = true
   }
 
   joinRoom() {
@@ -42,11 +53,6 @@ export class HomeComponent {
     if (!this.sid) {
       this.getRandomName()
     }
-    this.router.navigate(['/webrtc-v2', this.roomId, this.sid, true]).then(_ => {})
-  }
-  // Hàm lấy tên ngẫu nhiên
-  private getRandomName(): void {
-    const randomIndex = Math.floor(Math.random() * names.length);
-    this.sid = names[randomIndex];
+    this.router.navigate(['/webrtc-v2', this.roomId, this.sid, this.isMaster]).then(_ => {})
   }
 }
