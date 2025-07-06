@@ -20,6 +20,10 @@ import {HomeComponent} from '../home/home.component';
   styleUrls: ['./call.component.css']
 })
 export class CallComponentV2 implements OnInit {
+
+  constructor(private route: ActivatedRoute, private websocketSvc: WebsocketService) {
+
+  }
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   remoteUsers: string[] = ['user1', 'user2']; // dummy IDs
   isMinimized = false;
@@ -36,9 +40,12 @@ export class CallComponentV2 implements OnInit {
   msgSubscription: Subscription | null = null
   dataChannelSvc: DataChannelService
 
-  constructor(private route: ActivatedRoute, private websocketSvc: WebsocketService) {
+//   Toast
+  showToast = false;
+  toastMessage = 'Do you want to continue?';
 
-  }
+/* Toast dialog */
+  private toastYesCallback: (() => void) | null = null;
 
   ngOnInit(): void {
     this.roomId = this.route.snapshot.paramMap.get('roomId') || '';
@@ -157,7 +164,7 @@ export class CallComponentV2 implements OnInit {
       this.dataChannelSvc = new DataChannelService(
         this.sid,
         this.roomId,
-        this.websocketSvc.send
+        this.websocketSvc.send.bind(this.websocketSvc) // 👈 giữ nguyên context
       )
       // sending broadcast request to join data-channel
       if (this.isMaster === 'false') {
@@ -192,9 +199,14 @@ export class CallComponentV2 implements OnInit {
    * @param message signaling message
    */
   handlerSignalMessage(message: SignalMsg) {
+    try {
+      console.log(`handlerSignalMessage \n ${atob(message.msg)}`)
+    } catch (_e) {}
     switch (message.msg) {
       case REQUEST_JOIN_DATA_CHANNEL:
-        this.dataChannelSvc.createDataChannelConnection(this.sid, true).then()
+        this.showConfirmToast(`${message.from} want to join this room!`, () => {
+          this.dataChannelSvc.createDataChannelConnection(message.from, true).then()
+        })
         break
       case REQUEST_JOIN_MEDIA_CHANNEL:
         // TODO implement it
@@ -211,5 +223,24 @@ export class CallComponentV2 implements OnInit {
 
   goHome() {
     window.location.href = '/'
+  }
+
+  showConfirmToast(message: string, onYes: () => void) {
+    this.toastMessage = message;
+    this.toastYesCallback = onYes;
+    this.showToast = true;
+  }
+
+  onToastYes() {
+    this.showToast = false;
+    if (this.toastYesCallback) {
+      this.toastYesCallback();  // Gọi callback khi người dùng ấn Yes
+      this.toastYesCallback = null; // Xoá callback sau khi dùng
+    }
+  }
+
+  onToastNo() {
+    this.showToast = false;
+    this.toastYesCallback = null;
   }
 }

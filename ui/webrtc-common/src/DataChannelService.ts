@@ -25,6 +25,13 @@ export class DataChannelService extends EventTarget {
 
 
   constructor(userId: string, roomName: string, sendSignalMessageCallback: any)
+  /**
+   * Init data channel object
+   * @param userId your uid
+   * @param roomName name of socket room
+   * @param sendSignalMessageCallback for sending signal message, usually use websocket
+   * @param signalServers optional: when not use Google ICE server and deploy for your own
+   */
   constructor(userId: string, roomName: string, sendSignalMessageCallback: any, signalServers?: RTCConfiguration) {
     super();
     if (signalServers) {
@@ -76,6 +83,7 @@ export class DataChannelService extends EventTarget {
   public async handleSignalingData(message: SignalMsg) {
     const data = message.msg
     const sid = message.from
+    console.log(`Received ws: \n${JSON.stringify(message)}`)
     if (sid === this.userId) return;
     if (!this.peers[sid] && data.type === SignalType.offer) {
       await this.createDataChannelConnection(sid, false)

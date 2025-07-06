@@ -35,7 +35,15 @@ export class WebsocketService {
   }
 
   send(message: any): void {
-    this.socket$?.next(message);
+    console.log(`Sending \n ${JSON.stringify(message)}`)
+    try {
+      console.log(`SendingB64 \n ${atob(message.msg)}`)
+    } catch (_e) {}
+    try {
+      this.socket$?.next(message);
+    } catch (e) {
+      console.error('Websocket send error', e)
+    }
   }
 
   sendMessage(message: Message, type?: string): void {

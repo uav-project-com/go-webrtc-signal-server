@@ -122,8 +122,11 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 			data, err := base64.StdEncoding.DecodeString(msg.Msg)
 			if err != nil {
 				log.Println("error:", err)
+				log.Printf("Content: %v", msg.Msg)
+			} else {
+				log.Printf("Content: %v", string(data))
 			}
-			log.Printf("Content: %v", string(data))
+
 		}
 		// Send message to other
 		err = sendMsg(msg, conn, msg.To == nil)
