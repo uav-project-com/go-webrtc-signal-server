@@ -49,7 +49,7 @@
 
   <div class="chat-messages" #chatMessages>
     <div *ngFor="let msg of messages" [ngClass]="{'me': msg.from === 'me', 'peer': msg.from !== 'me'}" class="message">
-      <span>{{msg.text}}</span>
+      <b>{{msg.from}}: </b><span>{{msg.text}}</span>
     </div>
   </div>
 

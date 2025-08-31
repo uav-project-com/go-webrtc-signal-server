@@ -1,4 +1,5 @@
 import {Channel, SignalMsg, SignalType} from './dto/SignalMsg';
+import {Base64Util} from './common/Base64Util';
 
 export class DataChannelService extends EventTarget {
 
@@ -42,35 +43,19 @@ export class DataChannelService extends EventTarget {
   // lưu kênh chat của các peer
   private dataChannels: { [sid: string]: any } = {}
 
-// ------------- util functions ------------------------------
-  public static b64Decode = (str: string): string => {
-    try {
-      const jsonStr = atob(str);
-      return JSON.parse(jsonStr); // chuyển sang object
-    } catch (_) {
-      return str;
-    }
-  }
 
-  public static isBase64 = (str: string): boolean => {
-    if (!str || str.length % 4 !== 0) {
-      return false;
-    }
-    // regex kiểm tra ký tự base64 (+ padding =)
-    const notBase64 = /[^A-Z0-9+\/=]/i;
-    return !notBase64.test(str);
-  }
 
 // -----------------Private functions---------------------------
   /**
    * For dispatch on received message from data-channel
    * @param message incoming message
+   * @param from sender
    * @private
    */
-  private onMessage(message: string) {
+  private onMessage(message: string, from: string) {
     // Dispatch custom event
     const event = new CustomEvent('message', {
-      detail: {message}
+      detail: {message, from}
     });
     this.dispatchEvent(event);
   }
@@ -102,8 +87,8 @@ export class DataChannelService extends EventTarget {
    * @param message msg websocket
    */
   public async handleSignalingData(message: SignalMsg) {
-    const data = DataChannelService.isBase64(message.msg) ?
-      DataChannelService.b64Decode((message.msg)) :
+    const data = Base64Util.isBase64(message.msg) ?
+      Base64Util.base64ToObject((message.msg)) :
       message.msg
     const sid = message.from
     console.log(`Received signal ws: ${sid} : \n${JSON.stringify(data)}`)
@@ -186,7 +171,7 @@ export class DataChannelService extends EventTarget {
       const channel = event.channel
       channel.onmessage = (messageEvent: any) => {
         console.log('Received message from sender:', messageEvent.data)
-        this.onMessage(messageEvent);
+        this.onMessage(messageEvent.data, sid);
       }
       channel.onopen = () => {
         console.log('DataChannel Open')
@@ -199,7 +184,7 @@ export class DataChannelService extends EventTarget {
     if (isCaller) { // nếu 2 bên chưa gửi offer, chiếm lấy việc gửi offer ngay tức thì
       const channel = peer.createDataChannel('chat') // (#4)
       channel.onmessage = (event: any) => {
-        this.onMessage(event);
+        this.onMessage(event.data, sid);
       }
       console.log(`2. add data-channel ${sid} with channel ${channel}`)
       this.dataChannels[sid] = channel
@@ -241,10 +226,10 @@ export class DataChannelService extends EventTarget {
 
 // -----------------Events - callback---------------------------
   // event when received message from peer in data-channel
-  public addOnMessageEventListener(listener: (msg: string) => void) {
+  public addOnMessageEventListener(listener: (msg: string, from: string) => void) {
     this.addEventListener('message', (e: Event) => {
-      const customEvent = e as CustomEvent;
-      listener(customEvent.detail.msg);
+      const customEvent = e as CustomEvent<{ message: string; from: string }>;
+      listener(customEvent.detail.message, customEvent.detail.from);
     });
   }
 }

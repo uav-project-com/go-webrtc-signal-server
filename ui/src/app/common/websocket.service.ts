@@ -3,6 +3,7 @@ import { WebSocketSubject } from 'rxjs/webSocket';
 import { Observable, RetryConfig, catchError, of, retry } from 'rxjs';
 import { Message } from './Message';
 import { environment } from '../../environments/environment';
+import {Base64Util} from 'webrtc-common/dist/common/Base64Util';
 
 export const MEDIA_TYPE = 'md'
 export const DATA_TYPE = 'dt'
@@ -37,7 +38,7 @@ export class WebsocketService {
   send(message: any): void {
     console.log(`Sending \n ${JSON.stringify(message)}`)
     try {
-      console.log(`Sending-decodeB64 \n ${atob(message.msg)}`)
+      console.log(`Sending-decodeB64 \n ${Base64Util.base64ToObject(message.msg)}`)
     } catch (_e) {}
     try {
       this.socket$?.next(message);
@@ -58,16 +59,8 @@ export class WebsocketService {
       message.channel = MEDIA_TYPE
     }
     this.socket$?.next(message);
-    let log = null
-    try {
-      const msg = atob(message.msg)
-      log = JSON.stringify(msg)
-      console.log(`ws sending: ${log}`)
-    } catch (e) {
-      console.log(`ws sending: ${message.msg}`)
-      // tslint:disable-next-line:no-console
-      console.debug(e)
-    }
+    const msg = Base64Util.base64ToObject(message.msg)
+    console.log(`ws sending: ${msg}`)
   }
 
   /**

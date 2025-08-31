@@ -7,6 +7,7 @@ import {WebsocketService} from '../common/websocket.service';
 import {Subscription} from 'rxjs';
 import {Channel, SignalMsg} from 'webrtc-common/dist/dto/SignalMsg';
 import {HomeComponent} from '../home/home.component';
+import {Base64Util} from 'webrtc-common/dist/common/Base64Util';
 
 @Component({
   selector: 'app-call',
@@ -139,15 +140,16 @@ export class CallComponentV2 implements OnInit {
   sendMessage() {
     if (!this.newMessage.trim()) return;
 
-    // Add local message
-    this.messages.push({ text: this.newMessage, from: 'me' });
-
     // Send to other peers via signaling or WebRTC data channel
     // this.sendToPeers(this.newMessage);
-    this.dataChannelSvc.sendMsg(this.newMessage).then()
-
-    this.newMessage = '';
-    setTimeout(() => this.scrollToBottom(), 100);
+    this.dataChannelSvc.sendMsg(this.newMessage).then(
+      _ => {
+        // Add local message
+        this.messages.push({ text: this.newMessage, from: 'me' });
+        this.newMessage = '';
+        setTimeout(() => this.scrollToBottom(), 100);
+      }
+    )
   }
 
   clearChat() {
@@ -168,6 +170,10 @@ export class CallComponentV2 implements OnInit {
         this.roomId,
         this.websocketSvc.send.bind(this.websocketSvc) // 👈 giữ nguyên context
       )
+      this.dataChannelSvc.addOnMessageEventListener((msg, sender) => {
+        this.messages.push({ text: msg, from: sender });
+        setTimeout(() => this.scrollToBottom(), 100);
+      });
       // sending broadcast request to join data-channel
       if (this.isMaster === 'false') {
         // (#1) B Yêu cầu join room 1234
@@ -203,7 +209,7 @@ export class CallComponentV2 implements OnInit {
    */
   handlerSignalMessage(message: SignalMsg) {
     try {
-      console.log(`handlerSignalMessage \n ${atob(message.msg)}`)
+      console.log(`handlerSignalMessage \n ${Base64Util.base64ToObject(message.msg)}`)
     } catch (_e) {}
     switch (message.msg) {
       // (#2) A nhận được: Thông báo B1 join
