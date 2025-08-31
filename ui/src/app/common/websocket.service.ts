@@ -37,7 +37,7 @@ export class WebsocketService {
   send(message: any): void {
     console.log(`Sending \n ${JSON.stringify(message)}`)
     try {
-      console.log(`SendingB64 \n ${atob(message.msg)}`)
+      console.log(`Sending-decodeB64 \n ${atob(message.msg)}`)
     } catch (_e) {}
     try {
       this.socket$?.next(message);

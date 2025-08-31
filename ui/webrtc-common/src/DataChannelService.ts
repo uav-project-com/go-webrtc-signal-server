@@ -2,25 +2,6 @@ import {Channel, SignalMsg, SignalType} from './dto/SignalMsg';
 
 export class DataChannelService extends EventTarget {
 
-// -----------------Private fields------------------------------
-  // turn servers config
-  private readonly config: RTCConfiguration = {
-    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
-  }
-  // need for create new room or join to room
-  private readonly userId: string
-  // need for create new room or join to room
-  private readonly roomId: string
-  // interface for sending/exchange signal webrtc message like offer, answer, candidate... like websocket
-  private readonly sendSignaling: any
-
-  // lưu các obj RTCPeerConnection khi cần broadcast message cho nhiều user trong room qua data-channel theo mesh
-  private peers: { [sid: string]: any } = {};
-  // lưu tạm thời các object offer khi mà state của peer chưa ready for offer nhưng lại nhận được offer từ peer khác
-  private pendingCandidates: { [sid: string]: any } = {};
-  // lưu kênh chat của các peer
-  private dataChannels: { [sid: string]: any } = {}
-
 // -----------------PrivateConstructor--------------------------
 
 
@@ -42,6 +23,44 @@ export class DataChannelService extends EventTarget {
     this.sendSignaling = sendSignalMessageCallback
   }
 
+// -----------------Private fields------------------------------
+  // turn servers config
+  private readonly config: RTCConfiguration = {
+    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+  }
+  // need for create new room or join to room
+  private readonly userId: string
+  // need for create new room or join to room
+  private readonly roomId: string
+  // interface for sending/exchange signal webrtc message like offer, answer, candidate... like websocket
+  private readonly sendSignaling: any
+
+  // lưu các obj RTCPeerConnection khi cần broadcast message cho nhiều user trong room qua data-channel theo mesh
+  private peers: { [sid: string]: any } = {};
+  // lưu tạm thời các object offer khi mà state của peer chưa ready for offer nhưng lại nhận được offer từ peer khác
+  private pendingCandidates: { [sid: string]: any } = {};
+  // lưu kênh chat của các peer
+  private dataChannels: { [sid: string]: any } = {}
+
+// ------------- util functions ------------------------------
+  public static b64Decode = (str: string): string => {
+    try {
+      const jsonStr = atob(str);
+      return JSON.parse(jsonStr); // chuyển sang object
+    } catch (_) {
+      return str;
+    }
+  }
+
+  public static isBase64 = (str: string): boolean => {
+    if (!str || str.length % 4 !== 0) {
+      return false;
+    }
+    // regex kiểm tra ký tự base64 (+ padding =)
+    const notBase64 = /[^A-Z0-9+\/=]/i;
+    return !notBase64.test(str);
+  }
+
 // -----------------Private functions---------------------------
   /**
    * For dispatch on received message from data-channel
@@ -60,10 +79,10 @@ export class DataChannelService extends EventTarget {
     console.log(`handler offer from ${sid} with data ${data}`)
     const peer = this.peers[sid]
     if (peer) {
-      await peer.setRemoteDescription(new RTCSessionDescription(data.sdp))
-      console.log(`2 peer is: ${JSON.stringify(peer)}`)
-      const answer = await peer.createAnswer()
-      await peer.setLocalDescription(answer)
+      await peer.setRemoteDescription(new RTCSessionDescription(data.sdp)) // (#8)
+      console.log(`remote peer is: ${JSON.stringify(peer)}`)
+      const answer = await peer.createAnswer() // (#10)
+      await peer.setLocalDescription(answer) // (#11)
       this.peers[sid] = peer
       const answerMsg: SignalMsg = {
         channel: Channel.DataRtc,
@@ -72,7 +91,9 @@ export class DataChannelService extends EventTarget {
         from: this.userId,
         to: sid
       }
-      this.sendSignaling(answerMsg)
+      this.sendSignaling(answerMsg) // (#12)
+      // Nếu tồn tại candidate được gửi từ trước khi pc đuược tạo, tiến hành add Pending Candidate
+      await this.getAndClearPendingCandidates(sid)
     }
   }
 
@@ -81,32 +102,32 @@ export class DataChannelService extends EventTarget {
    * @param message msg websocket
    */
   public async handleSignalingData(message: SignalMsg) {
-    const data = message.msg
+    const data = DataChannelService.isBase64(message.msg) ?
+      DataChannelService.b64Decode((message.msg)) :
+      message.msg
     const sid = message.from
-    console.log(`Received ws: \n${JSON.stringify(message)}`)
-    if (sid === this.userId) return;
+    console.log(`Received signal ws: ${sid} : \n${JSON.stringify(data)}`)
+    if (sid === this.userId) return; // ignore loop back ws msg
     if (!this.peers[sid] && data.type === SignalType.offer) {
-      await this.createDataChannelConnection(sid, false)
+      console.log(`creating datachannel with sid ${sid} and master = false`)
+      await this.createDataChannelConnection(sid, false) // (#6)
     }
     switch (data.type) {
       case SignalType.offer:
-        await this.handlerOfferDataChannel(sid, data)
-        await this.addPendingCandidates(sid)
+        await this.handlerOfferDataChannel(sid, data) // (#8)
         break
-      case SignalType.answer:
+      case SignalType.answer: // (#13)
         console.log('received msg: answer')
         if (this.peers[sid]?.signalingState === 'have-local-offer') {
-          await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp))
+          await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp)) // (#14)
         }
         break
       case SignalType.candidate:
-        if (this.peers.has(sid) && this.peers[sid]?.remoteDescription) {
+        if (this.peers.hasOwnProperty(sid) && this.peers[sid]?.remoteDescription) {
+          console.log(`set candidate to PC of ${sid}`)
           await this.peers[sid]?.addIceCandidate(new RTCIceCandidate(data.sdp))
         } else {
-          if (!(sid in this.pendingCandidates)) {
-            this.pendingCandidates[sid] = []
-          }
-          this.pendingCandidates[sid] = data.sdp
+          this.addPendingCandidates(sid, data.sdp);
         }
         break
       default:
@@ -117,12 +138,20 @@ export class DataChannelService extends EventTarget {
    * Get candidates from list pending when other peers sent it too early
    * @param sid sender candidate
    */
-  private addPendingCandidates = async (sid: string) => {
+  private getAndClearPendingCandidates = async (sid: string) => {
     if (sid in this.pendingCandidates) {
       for (const candidate of this.pendingCandidates[sid]) {
         await this.peers[sid]?.addIceCandidate(new RTCIceCandidate(candidate))
       }
+      this.pendingCandidates[sid] = []
     }
+  }
+
+  private addPendingCandidates(sid: string, candidate: any) {
+    if (!(sid in this.pendingCandidates)) {
+      this.pendingCandidates[sid] = [] // khởi tạo mảng lưu sdp theo sid
+    }
+    this.pendingCandidates[sid].push(candidate)
   }
 
 // -----------------Public functions----------------------------
@@ -135,7 +164,7 @@ export class DataChannelService extends EventTarget {
   public async createDataChannelConnection(sid: string, isCaller: boolean) {
     console.log(`setup data channel for ${sid}`)
     // Unlike video, DataChannel requires a bidirectional connection:
-    const peer = new RTCPeerConnection(this.config) // (#3)
+    const peer = new RTCPeerConnection(this.config) // (#3) (#7)
     this.peers[sid] = peer // mapping A-Bn-sid
     // candidate event
     peer.onicecandidate = (event: { candidate: any }) => {
@@ -168,7 +197,6 @@ export class DataChannelService extends EventTarget {
 
     console.log(`before create offer, userId: ${this.userId}, sid: ${sid}`)
     if (isCaller) { // nếu 2 bên chưa gửi offer, chiếm lấy việc gửi offer ngay tức thì
-      // Assume We are the first one join to room, so let create that room: Create sender's data channel
       const channel = peer.createDataChannel('chat') // (#4)
       channel.onmessage = (event: any) => {
         this.onMessage(event);
@@ -188,7 +216,7 @@ export class DataChannelService extends EventTarget {
           from: this.userId,
           to: sid
         }
-        this.sendSignaling(data)
+        this.sendSignaling(data) // (#5)
       })
     }
     peer.addEventListener('connectionstatechange', (_event: any) => {
