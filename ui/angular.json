@@ -54,6 +54,14 @@
                   "maximumError": "10kb"
                 }
               ]
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true,
+              "extractLicenses": false,
+              "namedChunks": true,
+              "vendorChunk": true,
+              "buildOptimizer": false
             }
           }
         },
@@ -65,10 +73,10 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "your-project-name:build:production"
+              "buildTarget": "ui:build:production"
             },
             "development": {
-              "buildTarget": "your-project-name:build:development"
+              "buildTarget": "ui:build:development"
             }
           }
         },
@@ -121,7 +129,8 @@
           }
         }
       }
-    }},
+    }
+  },
   "cli": {
     "analytics": false
   }

@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --host 0.0.0.0",
+    "start": "ng serve --configuration development --host 0.0.0.0",
     "ssl-start": "NODE_OPTIONS=--openssl-legacy-provider webpack serve",
     "build": "ng build",
+    "common": "ng build webrtc-common",
     "test": "ng test",
     "lint": "ng lint",
     "e2e": "ng e2e",
@@ -26,6 +27,7 @@
     "@angular/router": "~19.0.6",
     "rxjs": "~7.8.1",
     "tslib": "^2.8.1",
+    "webrtc-common": "file:webrtc-common",
     "zone.js": "^0.15.0"
   },
   "devDependencies": {

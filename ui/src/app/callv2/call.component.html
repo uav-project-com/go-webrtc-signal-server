@@ -1,0 +1,75 @@
+<div class="meeting-container">
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <button class="back-btn" (click)="goHome()" >←</button>
+    <div class="meeting-id">{{sid}} joined room: {{roomId}}</div>
+    <button class="speaker-btn">🔊</button>
+  </div>
+
+  <!-- Meeting Info -->
+  <div class="meeting-status">
+    <p>You're the only one here</p>
+    <p>Share this meeting link with others you want in the meeting</p>
+    <div class="meeting-link">
+      <input type="text" [value]="joinLink" readonly>
+      <button (click)="copyLink()">📋</button>
+    </div>
+    <button class="invite-btn" (click)="shareInvite()">📤 Share invite</button>
+  </div>
+
+  <!-- Video Room -->
+  <div class="video-room">
+    <div class="participant-grid">
+      <video *ngFor="let user of remoteUsers" autoplay playsinline></video>
+    </div>
+
+    <!-- Mini Self Video -->
+    <div class="self-video" *ngIf="!isMinimized">
+      <video #localVideo autoplay muted playsinline></video>
+      <button class="minimize-btn" (click)="minimizeSelf()">−</button>
+    </div>
+    <button class="floating-dot" *ngIf="isMinimized" (click)="restoreSelf()">+</button>
+  </div>
+
+  <!-- Control Buttons -->
+  <div class="controls">
+    <button (click)="toggleCamera()">🎥</button>
+    <button (click)="toggleMic()">🎤</button>
+    <button (click)="openChat()">✉</button>
+    <button (click)="openMoreOptions()">⋮</button>
+    <button class="hangup" (click)="hangUp()">📞</button>
+  </div>
+</div>
+<!-- Chat Sidebar -->
+<div class="chat-sidebar" [class.open]="chatOpen">
+  <div class="chat-header">
+    <span>Chat</span>
+    <button (click)="toggleChat()">×</button>
+  </div>
+
+  <div class="chat-messages" #chatMessages>
+    <div *ngFor="let msg of messages" [ngClass]="{'me': msg.from === 'me', 'peer': msg.from !== 'me'}" class="message">
+      <b>{{msg.from}}: </b><span>{{msg.text}}</span>
+    </div>
+  </div>
+
+  <div class="chat-input">
+    <input [(ngModel)]="newMessage" (keydown.enter)="sendMessage()" placeholder="Type a message..." />
+    <button (click)="sendMessage()">Send</button>
+    <button (click)="clearChat()">Clear</button>
+  </div>
+</div>
+
+<!--Toast-->
+<div
+  *ngIf="showToast"
+  class="toast-container"
+>
+  <div class="toast-content">
+    <p>{{ toastMessage }}</p>
+    <div class="toast-buttons">
+      <button (click)="onToastYes()">✅ Yes</button>
+      <button (click)="onToastNo()">❌ No</button>
+    </div>
+  </div>
+</div>

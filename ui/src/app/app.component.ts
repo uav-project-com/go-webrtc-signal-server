@@ -11,7 +11,7 @@ import { environment } from '../environments/environment';
 export class AppComponent {
   title = 'ui';
   constructor() {
-    console.log('Base websocket :' + environment.socket +
+    console.warn('Base websocket :' + environment.socket +
       ' production? ' +  environment.production);
   }
 }
