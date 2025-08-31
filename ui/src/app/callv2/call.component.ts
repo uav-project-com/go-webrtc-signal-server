@@ -161,6 +161,8 @@ export class CallComponentV2 implements OnInit {
 
   initDataChannel() {
     if (this.dataChannelSvc == null) {
+      // isMaster = true:  (#0) A tạo room ID=1234 và chờ người khác join
+      // isMaster = false: (#1) B Yêu cầu join room 1234
       this.dataChannelSvc = new DataChannelService(
         this.sid,
         this.roomId,
@@ -168,6 +170,7 @@ export class CallComponentV2 implements OnInit {
       )
       // sending broadcast request to join data-channel
       if (this.isMaster === 'false') {
+        // (#1) B Yêu cầu join room 1234
         const msg: SignalMsg = {
           msg: REQUEST_JOIN_DATA_CHANNEL,
           roomId: this.roomId,
@@ -203,6 +206,7 @@ export class CallComponentV2 implements OnInit {
       console.log(`handlerSignalMessage \n ${atob(message.msg)}`)
     } catch (_e) {}
     switch (message.msg) {
+      // (#2) A nhận được: Thông báo B1 join
       case REQUEST_JOIN_DATA_CHANNEL:
         this.showConfirmToast(`${message.from} want to join this room!`, () => {
           this.dataChannelSvc.createDataChannelConnection(message.from, true).then()

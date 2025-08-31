@@ -135,10 +135,11 @@ export class DataChannelService extends EventTarget {
   public async createDataChannelConnection(sid: string, isCaller: boolean) {
     console.log(`setup data channel for ${sid}`)
     // Unlike video, DataChannel requires a bidirectional connection:
-    const peer = new RTCPeerConnection(this.config)
-    this.peers[sid] = peer
+    const peer = new RTCPeerConnection(this.config) // (#3)
+    this.peers[sid] = peer // mapping A-Bn-sid
     // candidate event
     peer.onicecandidate = (event: { candidate: any }) => {
+      // ICE trao đổi → dcA_B1 <-> dcB1 open
       if (event.candidate) {
         const answerMsg: SignalMsg = {
           channel: Channel.DataRtc,
@@ -151,7 +152,7 @@ export class DataChannelService extends EventTarget {
       }
     }
 
-    // // Handle incoming DataChannel from remote peer `sid`
+    // (#9) Handle incoming DataChannel from remote peer `sid`
     peer.ondatachannel = (event: { channel: RTCDataChannel }) => {
       const channel = event.channel
       channel.onmessage = (messageEvent: any) => {
@@ -161,16 +162,18 @@ export class DataChannelService extends EventTarget {
       channel.onopen = () => {
         console.log('DataChannel Open')
       }
+      console.log(`1. add data-channel ${sid} with channel ${channel}`)
       this.dataChannels[sid] = channel // Store the data channel reference
     }
 
     console.log(`before create offer, userId: ${this.userId}, sid: ${sid}`)
     if (isCaller) { // nếu 2 bên chưa gửi offer, chiếm lấy việc gửi offer ngay tức thì
       // Assume We are the first one join to room, so let create that room: Create sender's data channel
-      const channel = peer.createDataChannel('chat')
+      const channel = peer.createDataChannel('chat') // (#4)
       channel.onmessage = (event: any) => {
         this.onMessage(event);
       }
+      console.log(`2. add data-channel ${sid} with channel ${channel}`)
       this.dataChannels[sid] = channel
 
       // Creating webrtc datachannel connection FIRST for control UAV, Video stream and other will be init later
