@@ -22,9 +22,8 @@ import {Base64Util} from 'webrtc-common/dist/common/Base64Util';
 })
 export class CallComponentV2 implements OnInit {
 
-  constructor(private route: ActivatedRoute, private websocketSvc: WebsocketService) {
-
-  }
+  // ----------------- Khởi tạo & Lifecycle -----------------
+  constructor(private route: ActivatedRoute, private websocketSvc: WebsocketService) { }
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   remoteUsers: string[] = ['user1', 'user2']; // dummy IDs
   isMinimized = false;
@@ -81,86 +80,7 @@ export class CallComponentV2 implements OnInit {
     this.websocketSvc.close()
   }
 
-  async enableMedia() {
-    this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    this.localVideo.nativeElement.srcObject = this.stream;
-  }
-
-  toggleCamera() {
-    if (!this.stream) return this.enableMedia();
-    const videoTrack = this.stream.getVideoTracks()[0];
-    videoTrack.enabled = !videoTrack.enabled;
-  }
-
-  toggleMic() {
-    if (!this.stream) return this.enableMedia();
-    const audioTrack = this.stream.getAudioTracks()[0];
-    audioTrack.enabled = !audioTrack.enabled;
-  }
-
-  copyLink() {
-    navigator.clipboard.writeText(this.joinLink).then(_ => {});
-  }
-
-  shareInvite() {
-    window.open('mailto:?subject=Join my meeting&body=Click to join: ' + this.joinLink);
-  }
-
-  minimizeSelf() {
-    this.isMinimized = true;
-  }
-
-  restoreSelf() {
-    this.isMinimized = false;
-  }
-
-  openMoreOptions() {
-    alert('More options coming soon!');
-  }
-
-  hangUp() {
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
-    }
-  }
-
-  // Data channel chat
-  toggleChat() {
-    this.initDataChannel()
-    this.chatOpen = !this.chatOpen;
-  }
-
-  /**
-   * Chat example via data-channel
-   */
-  openChat() {
-    this.chatOpen = true;
-  }
-
-  sendMessage() {
-    if (!this.newMessage.trim()) return;
-
-    // Send to other peers via signaling or WebRTC data channel
-    // this.sendToPeers(this.newMessage);
-    this.dataChannelSvc.sendMsg(this.newMessage).then(
-      _ => {
-        // Add local message
-        this.messages.push({ text: this.newMessage, from: 'me' });
-        this.newMessage = '';
-        setTimeout(() => this.scrollToBottom(), 100);
-      }
-    )
-  }
-
-  clearChat() {
-    this.messages = [];
-  }
-
-  scrollToBottom() {
-    const el = document.querySelector('.chat-messages');
-    if (el) el.scrollTop = el.scrollHeight;
-  }
-
+  // ----------------- WebRTC & Signaling ------------------
   initDataChannel() {
     if (this.dataChannelSvc == null) {
       // isMaster = true:  (#0) A tạo room ID=1234 và chờ người khác join
@@ -231,10 +151,94 @@ export class CallComponentV2 implements OnInit {
     }
   }
 
+  // ----------------- Điều khiển Media --------------------
+  async enableMedia() {
+    this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    this.localVideo.nativeElement.srcObject = this.stream;
+  }
+
+  hangUp() {
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+    }
+  }
+
+  toggleCamera() {
+    if (!this.stream) return this.enableMedia();
+    const videoTrack = this.stream.getVideoTracks()[0];
+    videoTrack.enabled = !videoTrack.enabled;
+  }
+
+  toggleMic() {
+    if (!this.stream) return this.enableMedia();
+    const audioTrack = this.stream.getAudioTracks()[0];
+    audioTrack.enabled = !audioTrack.enabled;
+  }
+
+  // ----------------- Data Channel Chat -------------------
+  toggleChat() {
+    this.initDataChannel()
+    this.chatOpen = !this.chatOpen;
+  }
+
+  /**
+   * Chat example via data-channel
+   */
+  openChat() {
+    this.chatOpen = true;
+  }
+
+  sendMessage() {
+    if (!this.newMessage.trim()) return;
+
+    // Send to other peers via signaling or WebRTC data channel
+    // this.sendToPeers(this.newMessage);
+    this.dataChannelSvc.sendMsg(this.newMessage).then(
+      _ => {
+        // Add local message
+        this.messages.push({ text: this.newMessage, from: 'me' });
+        this.newMessage = '';
+        setTimeout(() => this.scrollToBottom(), 100);
+      }
+    )
+  }
+
+  clearChat() {
+    this.messages = [];
+  }
+
+  scrollToBottom() {
+    const el = document.querySelector('.chat-messages');
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
+  // ----------------- UI & Toast -------------------------
+  copyLink() {
+    navigator.clipboard.writeText(this.joinLink).then(_ => {});
+  }
+
+  shareInvite() {
+    window.open('mailto:?subject=Join my meeting&body=Click to join: ' + this.joinLink);
+  }
+
+  minimizeSelf() {
+    this.isMinimized = true;
+  }
+
+  restoreSelf() {
+    this.isMinimized = false;
+  }
+
+  openMoreOptions() {
+    alert('More options coming soon!');
+  }
+
   goHome() {
     window.location.href = '/'
   }
 
+  // ----------------- Thuộc tính -------------------------
+  // ...các thuộc tính class...
   showConfirmToast(message: string, onYes: () => void) {
     this.toastMessage = message;
     this.toastYesCallback = onYes;
