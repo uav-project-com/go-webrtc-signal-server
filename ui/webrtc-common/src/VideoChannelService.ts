@@ -7,6 +7,8 @@ import {Base64Util} from './common/Base64Util';
  * Mapping peerConnection theo userId, quản lý stream, signaling, và các event điều khiển video/mic.
  */
 export class VideoChannelService extends EventTarget {
+
+  // ----------------- Khởi tạo & cấu hình -----------------
   private readonly config: RTCConfiguration = {
     iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
   };
@@ -37,6 +39,7 @@ export class VideoChannelService extends EventTarget {
     this.sendSignaling = sendSignalMessageCallback;
   }
 
+  // ----------------- WebRTC Core ------------------------
   /**
    * Thiết lập local stream cho user hiện tại và add vào tất cả peer connection đã có
    * @param stream - MediaStream local
@@ -61,8 +64,9 @@ export class VideoChannelService extends EventTarget {
 
     // Add local stream tracks
     if (this.localStream) {
+      const ls = this.localStream
       this.localStream.getTracks().forEach(track => {
-        peer.addTrack(track, this.localStream!);
+        peer.addTrack(track, ls);
       });
     }
 
@@ -179,6 +183,16 @@ export class VideoChannelService extends EventTarget {
   }
 
   /**
+   * Lấy remote stream của một peer theo userId
+   * @param sid - userId của peer
+   * @returns MediaStream hoặc undefined
+   */
+  public getRemoteStream(sid: string): MediaStream | undefined {
+    return this.streams[sid];
+  }
+
+  // ----------------- Điều khiển Media --------------------
+  /**
    * Bật/tắt video cho local stream
    * @param enabled - true để bật, false để tắt
    */
@@ -204,19 +218,7 @@ export class VideoChannelService extends EventTarget {
     }
   }
 
-
-
-  /**
-   * Lấy remote stream của một peer theo userId
-   * @param sid - userId của peer
-   * @returns MediaStream hoặc undefined
-   */
-  public getRemoteStream(sid: string): MediaStream | undefined {
-    return this.streams[sid];
-  }
-
-// -----------------Events - callback---------------------------
-
+  // ----------------- Event UI Callback -------------------
   /**
    * Đăng ký lắng nghe event khi có remote stream mới từ peer
    * @param listener - callback nhận stream và userId

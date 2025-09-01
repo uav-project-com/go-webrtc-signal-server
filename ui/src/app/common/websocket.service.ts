@@ -1,9 +1,9 @@
 import { Injectable } from '@angular/core';
 import { WebSocketSubject } from 'rxjs/webSocket';
 import { Observable, RetryConfig, catchError, of, retry } from 'rxjs';
-import { Message } from './Message';
 import { environment } from '../../environments/environment';
 import {Base64Util} from 'webrtc-common/dist/common/Base64Util';
+import {Message} from 'webrtc-common/src/common/Message';
 
 export const MEDIA_TYPE = 'md'
 export const DATA_TYPE = 'dt'
