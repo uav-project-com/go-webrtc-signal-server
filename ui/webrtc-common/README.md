@@ -112,7 +112,7 @@ sequenceDiagram
     B1->>Sig: Gửi answer
     Sig-->>A: Answer từ B1
     A->>A: pcA_B1.setRemoteDescription(answer)
-    Note over A,B1: ICE trao đổi → DataChannel open (dcA_B1 <-> dcB1)
+    Note over A,B1: ICE trao đổi → DataChannel open (dcA_B1 <<->> dcB1)
 
     B2->>Sig: join room 1234
     Sig-->>A: Thông báo B2 join
@@ -128,7 +128,7 @@ sequenceDiagram
     B2->>Sig: Gửi answer
     Sig-->>A: Answer từ B2
     A->>A: pcA_B2.setRemoteDescription(answer)
-    Note over A,B2: ICE trao đổi → DataChannel open (dcA_B2 <-> dcB2)
+    Note over A,B2: ICE trao đổi → DataChannel open (dcA_B2 <<->> dcB2)
 ```
 
 ---
@@ -263,4 +263,45 @@ sequenceDiagram
 
 ---
 
+# Video call
 
+## Sơ đồ full mesh A-B-C 6 pc
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Peer A
+    participant B as Peer B
+    participant C as Peer C
+
+    Note over A,C: Mỗi peer tạo RTCPeerConnection với các peer khác<br/>và add local stream vào từng connection
+
+    %% A tạo kết nối với B và C
+    A->>B: [offer] gửi SDP Offer
+    B->>A: [answer] gửi SDP Answer
+    A<<->>B: [candidate] Trao đổi ICE Candidate
+    A->>B: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
+    B->>A: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
+    B-->>A: [remoteStream] B gửi track cho A
+    A-->>B: [remoteStream] A gửi track cho B
+
+    A->>C: [offer] gửi SDP Offer
+    C->>A: [answer] gửi SDP Answer
+    A<<->>C: [candidate] Trao đổi ICE Candidate
+    A->>C: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
+    C->>A: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
+    C-->>A: [remoteStream] C gửi track cho A
+    A-->>C: [remoteStream] A gửi track cho C
+
+    %% B tạo kết nối với C
+    B->>C: [offer] gửi SDP Offer
+    C->>B: [answer] gửi SDP Answer
+    B<<->>C: [candidate] Trao đổi ICE Candidate
+    B->>C: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
+    C->>B: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
+    C-->>B: [remoteStream] C gửi track cho B
+    B-->>C: [remoteStream] B gửi track cho C
+
+    Note over A,C: Khi user thao tác UI<br/>A-->>B: [toggleVideo/toggleMic] gửi event điều khiển<br/>B-->>A: [toggleVideo/toggleMic] gửi event điều khiển
+    Note over A,C: Sau khi hoàn tất, có 3 kết nối: A-B, A-C, B-C
+```
