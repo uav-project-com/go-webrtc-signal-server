@@ -277,8 +277,18 @@ sequenceDiagram
     Note over A,C: Mỗi peer tạo RTCPeerConnection với các peer khác<br/>và add local stream vào từng connection
 
     %% A tạo kết nối với B và C
-    A->>B: [offer] gửi SDP Offer
-    B->>A: [answer] gửi SDP Answer
+    A->>A: Init Service components
+    B->>A: B send request open Video call to A (via websocket server)
+    A->>A: Init Webrtc objects
+    Note over A: pcB = new RTCPeerConnection() <br> pcB.onicecandidate() send to B <br> pcB.ontrack() set remote stream to HTML video tag <br> pcB.oniceconnectionstatechange logging <br> pcB.onsignalingstatechange logging <br> pcB.pc.addTrack(localStream.getTrack)
+    A->>B: [offer] A là master => gửi SDP Offer
+    A->>A: mapping PeerConnection B với sid B (lưu vào mapping)
+
+    B->>B: Nếu "Webrtc objects" pcA null => khởi tạo giống step của A: "Init Webrtc objects"
+    Note over B: pcA.setRemoteDescription(SDP Offer from A) <br> pcA.createAnswer <br> pcA.setLocalDescription(answer)
+    B->>A: [answer] pcA gửi SDP Answer
+    B->>B: add pending candidate của A nếu có.
+    
     A<<->>B: [candidate] Trao đổi ICE Candidate
     A->>B: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
     B->>A: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
