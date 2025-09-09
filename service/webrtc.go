@@ -121,10 +121,10 @@ func (v *videoCallService) JoinRoom(ctx *gin.Context, req dto.JoinRequest) error
 			log.Printf("Received: %v", spew.Sdump(msg, dto.Message{}))
 			data, err := base64.StdEncoding.DecodeString(msg.Msg)
 			if err != nil {
-				log.Println("error:", err)
-				log.Printf("Content: %v", msg.Msg)
+				log.Println("warning decode b64:", err)
+				log.Printf("Forwarding msg: %v", msg.Msg)
 			} else {
-				log.Printf("Content: %v", string(data))
+				log.Printf("Forwarding msg: %v", string(data))
 			}
 
 		}
@@ -330,6 +330,7 @@ func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error 
 		return errors.New(fmt.Sprintf("JSON encoding error: %s", err))
 	}
 	if broadcast {
+		log.Println("Send broadcast from ", *msg.From)
 		// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
 		for user, conn := range connections {
 			if msg.From != nil && user != *msg.From {

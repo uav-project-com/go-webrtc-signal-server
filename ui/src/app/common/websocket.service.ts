@@ -3,10 +3,7 @@ import { WebSocketSubject } from 'rxjs/webSocket';
 import { Observable, RetryConfig, catchError, of, retry } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {Base64Util} from 'webrtc-common/dist/common/Base64Util';
-import {Message} from 'webrtc-common/src/common/Message';
-
-export const MEDIA_TYPE = 'md'
-export const DATA_TYPE = 'dt'
+import {SignalMsg} from 'webrtc-common/dist/dto/SignalMsg';
 
 @Injectable({
   providedIn: 'root'
@@ -35,32 +32,20 @@ export class WebsocketService {
     }
   }
 
-  send(message: any): void {
+  /**
+   * Using for send signaling
+   * @param message msg signaling
+   */
+  send(message: SignalMsg): void {
     console.log(`Sending \n ${JSON.stringify(message)}`)
     try {
-      console.log(`Sending-decodeB64 \n ${Base64Util.base64ToObject(message.msg)}`)
+      console.log(`Sending-decodeB64 \n ${Base64Util.base64ToObject(message.msg, true)}`)
     } catch (_e) {}
     try {
       this.socket$?.next(message);
     } catch (e) {
       console.error('Websocket send error', e)
     }
-  }
-
-  sendMessage(message: Message, type?: string): void {
-    if (!message.from) {
-      message.from = this.defaultSrcId
-    }
-    if (type && type === DATA_TYPE) {
-      // dt => data-channel
-      message.channel = DATA_TYPE
-    } else if (type && type === MEDIA_TYPE) {
-      // md => media
-      message.channel = MEDIA_TYPE
-    }
-    this.socket$?.next(message);
-    const msg = Base64Util.base64ToObject(message.msg)
-    console.log(`ws sending: ${msg}`)
   }
 
   /**

@@ -60,7 +60,6 @@ export class VideoChannelService extends EventTarget {
    */
   public async createVideoPeerConnection(sid: string, isCaller: boolean) {
     const peer = new RTCPeerConnection(this.config);
-    this.peers[sid] = peer;
 
     // Add local stream tracks
     if (this.localStream) {
@@ -81,6 +80,8 @@ export class VideoChannelService extends EventTarget {
           to: sid
         };
         this.sendSignaling(msg);
+      } else {
+        console.debug('ICE gathering complete');
       }
     };
 
@@ -95,6 +96,7 @@ export class VideoChannelService extends EventTarget {
 
     // Lắng nghe trạng thái kết nối
     peer.onconnectionstatechange = () => {
+      console.log(`connectionState: ${peer.connectionState}`)
       this.dispatchEvent(new CustomEvent('connectionState', {detail: {state: peer.connectionState, from: sid}}));
     };
 
@@ -104,13 +106,14 @@ export class VideoChannelService extends EventTarget {
       await peer.setLocalDescription(offer);
       const msg: SignalMsg = {
         channel: Channel.Webrtc,
-        msg: btoa(JSON.stringify({type: offer.type, sdp: offer})),
+        msg: btoa(JSON.stringify({type: offer.type, sdp: peer.localDescription})),
         roomId: this.roomId,
         from: this.userId,
         to: sid
       };
       this.sendSignaling(msg);
     }
+    this.peers[sid] = peer;
   }
 
   /**
@@ -130,12 +133,13 @@ export class VideoChannelService extends EventTarget {
 
     switch (data.type) {
       case SignalType.offer:
+        console.log(`received offer ${data.sdp}`)
         await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp));
         const answer = await this.peers[sid]?.createAnswer();
         await this.peers[sid]?.setLocalDescription(answer);
         const answerMsg: SignalMsg = {
           channel: Channel.Webrtc,
-          msg: btoa(JSON.stringify({type: answer.type, sdp: answer})),
+          msg: btoa(JSON.stringify({type: answer.type, sdp: this.peers[sid]?.localDescription})),
           roomId: this.roomId,
           from: this.userId,
           to: sid
@@ -144,10 +148,12 @@ export class VideoChannelService extends EventTarget {
         await this.getAndClearPendingCandidates(sid);
         break;
       case SignalType.answer:
+        console.log(`sdp: ${data.sdp}`)
         await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp));
         break;
       case SignalType.candidate:
         if (this.peers.hasOwnProperty(sid) && this.peers[sid]?.remoteDescription) {
+          console.log(`adding candidate: ${data.sdp}`)
           await this.peers[sid]?.addIceCandidate(new RTCIceCandidate(data.sdp));
         } else {
           this.addPendingCandidates(sid, data.sdp);
@@ -177,8 +183,10 @@ export class VideoChannelService extends EventTarget {
    */
   private addPendingCandidates(sid: string, candidate: any) {
     if (!(sid in this.pendingCandidates)) {
+      console.log(`init list candidate for ${sid}`)
       this.pendingCandidates[sid] = [];
     }
+    console.log(`Adding pending candidate ${sid}`)
     this.pendingCandidates[sid].push(candidate);
   }
 

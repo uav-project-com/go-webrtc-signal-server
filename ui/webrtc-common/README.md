@@ -288,7 +288,9 @@ sequenceDiagram
     Note over B: pcA.setRemoteDescription(SDP Offer from A) <br> pcA.createAnswer <br> pcA.setLocalDescription(answer)
     B->>A: [answer] pcA gửi SDP Answer
     B->>B: add pending candidate của A nếu có.
-    
+
+    A->>A: nếu pcB.signalingState === 'have-local-offer' => add 
+
     A<<->>B: [candidate] Trao đổi ICE Candidate
     A->>B: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng
     B->>A: [pendingCandidate] Lưu ICE nếu chưa sẵn sàng

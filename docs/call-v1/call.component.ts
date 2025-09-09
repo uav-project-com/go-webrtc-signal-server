@@ -1,0 +1,253 @@
+import {ChangeDetectorRef, Component, OnInit} from '@angular/core'
+import {ActivatedRoute} from '@angular/router'
+import {FormsModule} from '@angular/forms'
+import {Message} from '../common/Message'
+import {Subscription} from 'rxjs'
+import {DATA_TYPE, MEDIA_TYPE, WebsocketService} from '../../ui/src/app/common/websocket.service'
+import {environment} from '../../ui/src/environments/environment'
+import {WebRTCService} from './webrtc.service';
+import {CallBackInfo, RoomInfo} from '../../ui/src/app/common/RoomInfo';
+import {DataChannelRTCMultiService} from './data.channel-multiple.service';
+
+const ENABLE_LOCAL_VIDEO = true
+const REQUEST_JOIN_DATA_CHANNEL = '4f9ff4f2-6d46-479f-b94a-74e76d012bc2'
+
+@Component({
+  selector: 'app-call',
+  imports: [FormsModule],
+  templateUrl: './call.component.html',
+  styleUrls: ['./call.component.css']
+})
+export class CallComponent implements OnInit {
+  isChecked = true
+
+
+  message: string
+  listMessage: string[] = []
+
+  // líst
+  /** FOR WebSocket */
+  websocketMess: string
+  wsMessages: Message[] = []
+  callBtnState = false
+  private msgSubscription: Subscription | null = null
+
+  // WebRTC services
+  private dataChannelSvc: DataChannelRTCMultiService;
+  private videoCallSvc: WebRTCService
+  // Room information
+  private roomInfo: RoomInfo;
+
+  constructor(
+    private cdr: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private websocketSvc: WebsocketService) {
+  }
+
+  private disableConsoleLevels(levels: (string)[]) {
+    levels.forEach(level => {
+      if (typeof console[level] === 'function') {
+        console[level] = (() => {
+        })
+      }
+    })
+  }
+
+  ngOnInit() {
+    // TRACE LOG:
+    switch (environment.debug) {
+      case 'log':
+        this.disableConsoleLevels(['debug', 'trace'])
+        break
+      case 'info':
+        this.disableConsoleLevels(['debug', 'trace', 'log'])
+        break
+      case 'warn':
+        this.disableConsoleLevels(['debug', 'trace', 'log', 'info'])
+        break
+      case 'error':
+        this.disableConsoleLevels(['debug', 'trace', 'log', 'info', 'warn'])
+        break
+      default:
+        console.log('enabled all logging level')
+    }
+
+    // INIT WebRTC
+
+    // start the call
+    this.roomInfo = new RoomInfo()
+    this.roomInfo.roomId = this.route.snapshot.paramMap.get('meetingId')
+    this.roomInfo.userId = this.route.snapshot.paramMap.get('userId')
+  }
+
+  ngOnDestroy(): void {
+    this.callBtnState = false
+    this.msgSubscription?.unsubscribe()
+    this.websocketSvc.close()
+    this.videoCallSvc.hangup()
+  }
+
+  /**
+   * Button event, start to:
+   * - init websocket
+   * - start to connect data-channel webrtc
+   */
+  connectWebsocket() {
+    // INIT WebSocket - Auto connect to server
+    this.websocketSvc.connect(this.roomInfo.roomId, this.roomInfo.userId)
+    this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
+      if (message && !message.status) { // received message from peers
+        try {
+          if (message.msg === REQUEST_JOIN_DATA_CHANNEL) {
+            // create data channel
+            this.dataChannelSvc.setupDataChannelConnections(message.from, true)
+              .then(() => {
+              })
+            return
+          }
+          // Trying to parse Webrtc messages
+          const data = JSON.parse(atob(message.msg))
+          const channel = message.channel
+          message.msg = data
+          console.log(`Received msg: ${JSON.stringify(message)} with channel ${channel}`)
+          if (channel === DATA_TYPE) {
+            this.dataChannelSvc.handleSignalingData(message).then((_: any) => {
+            })
+          } else if (channel === MEDIA_TYPE) {
+            this.videoCallSvc.handleSignalingMediaMsg(message, this.addRemoteVideoElement, this.addLocalVideoElement)
+              .then(_ => {
+              })
+          } else {
+            this.wsMessages.push(message)
+          }
+        } catch (e) {
+          console.log(e)
+          this.wsMessages.push(message)
+        }
+      } else if (message?.status) { // response msg from websocket server
+        console.log(`response: ${JSON.stringify(message)}`)
+        if (message.status === 200 && message.msg.startsWith('onConnected')) {
+          console.log('====-Websocket connected! Start to data-channel connection-===')
+          // websocket is ok now, start to init objects Webrtc
+          await this.startControlUav().then(_ => {
+            this.callBtnState = true
+          })
+          // send broadcast to talk with each other I am joining
+          const data: Message = {
+            from: this.roomInfo.userId,
+            msg: REQUEST_JOIN_DATA_CHANNEL,
+            roomId: this.roomInfo.roomId
+          }
+          this.websocketSvc.sendMessage(data)
+        }
+      }
+    })
+  }
+
+  /***************************** WebSocket Functions *******************************/
+  /**
+   * Normal chatting with websocket
+   */
+  sendWsMessage() {
+    const data: Message = {
+      from: this.roomInfo.userId,
+      msg: this.websocketMess,
+      roomId: this.roomInfo.roomId
+    }
+    this.websocketSvc.sendMessage(data)
+    this.wsMessages.push(data)
+  }
+
+  /**
+   * Chatting with webrtc Data-channel
+   */
+  async sendMsg(text?: string) {
+    const msg = text || this.message
+    await this.dataChannelSvc.sendMsg(msg)
+    this.listMessage.push('Me:' + msg)
+    this.message = ''
+    document.getElementById('data-channel-text').textContent = ''
+    this.cdr.detectChanges()
+  }
+
+  /**
+   * Creating data-channel connection p2p after websocket connect for controlling UAV
+   */
+  private async startControlUav() {
+    const callback: CallBackInfo = {
+      context: this,
+      uiControlCallback: this.pushMessageDatachannelCallback,
+      videoHandlerCallback: this.startVideoCallBack
+    }
+    this.dataChannelSvc = new DataChannelRTCMultiService(this.websocketSvc, this.roomInfo, callback)
+    // init video call service
+    this.videoCallSvc = new WebRTCService(this.websocketSvc,this.roomInfo)
+  }
+
+  // WebRTC methods for media streaming
+
+  toggleVideoCall(event: any) {
+    this.isChecked = event.target.checked
+    if (this.videoCallSvc.onCall) {
+      this.videoCallSvc.toggleMediaCall(this.isChecked, this.addLocalVideoElement).then()
+    }
+  }
+
+  /*=============================CALL BACKS==============================================*/
+
+  pushMessageDatachannelCallback(context: any, msg: string) {
+    context.listMessage.push('Peer: ' + msg)
+    context.cdr.detectChanges()
+  }
+
+  /**
+   * Callback start video call when data-channel send command 'video'
+   * @param context `this` pointer
+   * @param from from userId
+   * @param isCaller set the fist one started video call
+   */
+  async startVideoCallBack(context: any, isCaller: boolean, from: string) {
+    await context.videoCallSvc.startVideoCall(from, isCaller, context.addRemoteVideoElement, context.addLocalVideoElement)
+  }
+
+  /**
+   * callback Ui
+   * @param stream remote video
+   * @param sid userId
+   */
+  addRemoteVideoElement(stream: any, sid: string) {
+    let video = document.getElementById(sid) as HTMLVideoElement
+    if (!video) {
+      video = document.createElement('video')
+      video.autoplay = true
+      video.srcObject = stream
+      video.id = sid
+      video.playsInline = true
+      document.querySelector('#remoteStreams').appendChild(video)
+    } else {
+      console.log('Updating existing remote video element')
+      video.srcObject = stream
+    }
+  }
+
+  /**
+   * callback Ui
+   * @param stream remote video
+   * @param sid userId
+   */
+  addLocalVideoElement(stream: any, sid: string) {
+    if (ENABLE_LOCAL_VIDEO) { // giả sử máy Bob là máy watching only (điều khiển UAV)
+      const localVideo = document.getElementById(sid) as HTMLVideoElement
+      if (!localVideo) {
+        console.log('create local video')
+        const newRemoteStreamElem = document.createElement('video')
+        newRemoteStreamElem.autoplay = true
+        newRemoteStreamElem.srcObject = stream
+        newRemoteStreamElem.id = sid
+        document.querySelector('#localStream').appendChild(newRemoteStreamElem)
+      } else {
+        localVideo.srcObject = stream
+      }
+    }
+  }
+}

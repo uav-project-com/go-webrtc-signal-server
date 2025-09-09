@@ -1,0 +1,51 @@
+<h2>Golang example</h2>
+
+<div class="container_row">
+  <div id="localStream"></div>
+  <div id="remoteStreams"></div>
+  <br/>
+  <hr/>
+  <h2>WebRTC data-channel Chat</h2>
+  <label>
+    <input type="checkbox" [(ngModel)]="isChecked" (click)="toggleVideoCall($event)" /> Enable video call
+  </label>
+  <p>Video call: {{ isChecked ? 'ON' : 'OFF' }}</p>
+  <div class="container_msg">
+    <textarea id="data-channel-text" [(ngModel)]="message" (keydown.enter)="sendMsg()" rows="4" placeholder="Type `video` for start chat sex..."></textarea>
+    <input type="submit" for="data-channel-text" class="send-button" (click)="sendMsg()" value="Rtc send"/>
+  </div>
+  <h4>Received data-channel webrtc messages:</h4>
+  <div class="scrollable-container">
+    <ul>
+      @for (item of listMessage; track item) {
+      <li>{{ item }}</li>
+      } @empty {
+      <li>There are no items.</li>
+      }
+    </ul>
+  </div>
+  <hr/>
+
+  <h2>WebSocket Chat</h2>
+  <button (click)="connectWebsocket()" class="start-call" [disabled]="callBtnState">
+    Start the chat websocket && chat with data-channel!
+  </button>
+  <div class="container_msg">
+    <textarea [(ngModel)]="websocketMess" rows="4" placeholder="Type your message here..."></textarea>
+    <button class="send-button" (click)="sendWsMessage()">WS Send</button>
+  </div>
+
+  <h4>Received websocket messages:</h4>
+  <div class="scrollable-container">
+    <!-- https://angular.dev/api/core/@for -->
+    <ul>
+      @for (item of wsMessages; track item.msg) {
+      <li>{{ item.from }}: {{ item.msg }}</li>
+      } @empty {
+      <li>There are no items.</li>
+      }
+    </ul>
+
+  </div>
+
+</div>
