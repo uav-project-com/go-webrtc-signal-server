@@ -1,4 +1,4 @@
-import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
+import {Component, ElementRef, OnInit, ViewChild, ViewEncapsulation} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import {NgClass, NgForOf, NgIf} from '@angular/common';
 import {FormsModule} from '@angular/forms';
@@ -19,7 +19,8 @@ import { VideoChannelService } from 'webrtc-common/dist/VideoChannelService';
     FormsModule,
     NgClass
   ],
-  styleUrls: ['./call.component.css']
+  styleUrls: ['./call.component.css'],
+  encapsulation: ViewEncapsulation.None
 })
 export class CallComponentV2 implements OnInit {
 
@@ -119,8 +120,27 @@ export class CallComponentV2 implements OnInit {
     this.videoChannelSvc.toggleLocalVideo(true);
     this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
       this.remoteStreams[from] = stream;
-      const videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
-      if (videoEl) videoEl.srcObject = stream;
+      let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
+      if (!videoEl) {
+        const grid = document.querySelector('.participant-grid');
+        if (grid) {
+          // Tạo div tile
+          const tileDiv = document.createElement('div');
+          tileDiv.className = 'tile';
+
+          // Tạo video element
+          videoEl = document.createElement('video');
+          videoEl.id = 'video-' + from;
+          videoEl.autoplay = true;
+          videoEl.playsInline = true;
+          videoEl.className = 'dynamic-video'; // Thêm class
+
+          // Thêm video vào tile, tile vào grid
+          tileDiv.appendChild(videoEl);
+          grid.appendChild(tileDiv);
+        }
+      }
+      videoEl.srcObject = stream;
     });
     // Bắt đầu video call
     // Request video call broadcast
@@ -191,7 +211,7 @@ export class CallComponentV2 implements OnInit {
   // ----------------- Điều khiển Media --------------------
   private async enableMedia() {
     this.initVideoChannel();
-    this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
     this.localVideo.nativeElement.srcObject = this.stream;
     await this.videoChannelSvc.setLocalStream(this.stream);
   }
@@ -299,5 +319,15 @@ export class CallComponentV2 implements OnInit {
   onToastNo() {
     this.showToast = false;
     this.toastYesCallback = null;
+  }
+
+  ngAfterViewChecked(): void {
+    // Gán lại srcObject cho tất cả video remote
+    this.remoteUsers.forEach(user => {
+      const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
+      if (videoEl && this.remoteStreams[user] && videoEl.srcObject !== this.remoteStreams[user]) {
+        videoEl.srcObject = this.remoteStreams[user];
+      }
+    });
   }
 }
