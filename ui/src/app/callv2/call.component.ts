@@ -2,13 +2,18 @@ import {Component, ElementRef, OnInit, ViewChild, ViewEncapsulation} from '@angu
 import {ActivatedRoute} from '@angular/router';
 import {NgClass, NgForOf, NgIf} from '@angular/common';
 import {FormsModule} from '@angular/forms';
-import {DataChannelService, REQUEST_JOIN_DATA_CHANNEL, REQUEST_JOIN_MEDIA_CHANNEL} from 'webrtc-common';
-import {WebsocketService} from '../common/websocket.service';
 import {Subscription} from 'rxjs';
-import {Channel, SignalMsg} from 'webrtc-common/dist/dto/SignalMsg';
 import {HomeComponent} from '../home/home.component';
-import {Base64Util} from 'webrtc-common/dist/common/Base64Util';
-import { VideoChannelService } from 'webrtc-common/dist/VideoChannelService';
+import {
+  Base64Util,
+  Channel,
+  DataChannelService,
+  REQUEST_JOIN_DATA_CHANNEL, REQUEST_JOIN_MEDIA_CHANNEL,
+  SignalMsg,
+  VideoChannelService,
+  WebsocketService
+} from 'webrtc-common';
+import {environment} from '../../environments/environment';
 
 @Component({
   selector: 'app-call',
@@ -25,7 +30,7 @@ import { VideoChannelService } from 'webrtc-common/dist/VideoChannelService';
 export class CallComponentV2 implements OnInit {
 
   // ----------------- Khởi tạo & Lifecycle -----------------
-  constructor(private route: ActivatedRoute, private websocketSvc: WebsocketService) { }
+  constructor(private readonly route: ActivatedRoute) {}
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   remoteUsers: string[] = ['user1', 'user2']; // dummy IDs
   isMinimized = false;
@@ -42,6 +47,7 @@ export class CallComponentV2 implements OnInit {
   msgSubscription: Subscription | null = null
   dataChannelSvc: DataChannelService
   videoChannelSvc!: VideoChannelService;
+  websocketSvc: WebsocketService
   remoteStreams: { [userId: string]: MediaStream } = {};
 
 //   Toast
@@ -63,6 +69,7 @@ export class CallComponentV2 implements OnInit {
     console.log('Room ID:', this.roomId);
     console.log('Session/User ID (sid):', this.sid);
     // init websocket signaling client
+    this.websocketSvc = new WebsocketService(environment.socket)
     this.websocketSvc.connect(this.roomId, this.sid)
 
     // Khi nhận được signaling message từ websocket

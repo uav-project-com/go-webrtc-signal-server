@@ -123,7 +123,7 @@ export class DataChannelService extends EventTarget {
    * Get candidates from list pending when other peers sent it too early
    * @param sid sender candidate
    */
-  private getAndClearPendingCandidates = async (sid: string) => {
+  private readonly getAndClearPendingCandidates = async (sid: string) => {
     if (sid in this.pendingCandidates) {
       for (const candidate of this.pendingCandidates[sid]) {
         await this.peers[sid]?.addIceCandidate(new RTCIceCandidate(candidate))

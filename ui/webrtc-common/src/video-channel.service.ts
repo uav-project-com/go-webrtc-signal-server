@@ -81,7 +81,7 @@ export class VideoChannelService extends EventTarget {
         };
         this.sendSignaling(msg);
       } else {
-        console.debug('ICE gathering complete');
+        console.log('ICE gathering complete');
       }
     };
 
@@ -132,7 +132,7 @@ export class VideoChannelService extends EventTarget {
     }
 
     switch (data.type) {
-      case SignalType.offer:
+      case SignalType.offer: {
         console.log(`received offer ${data.sdp}`)
         await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp));
         const answer = await this.peers[sid]?.createAnswer();
@@ -147,6 +147,7 @@ export class VideoChannelService extends EventTarget {
         this.sendSignaling(answerMsg);
         await this.getAndClearPendingCandidates(sid);
         break;
+      }
       case SignalType.answer:
         console.log(`sdp: ${data.sdp}`)
         await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp));
