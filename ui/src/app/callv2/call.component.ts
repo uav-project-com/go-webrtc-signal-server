@@ -2,16 +2,10 @@ import {AfterViewInit, Component, ElementRef, OnInit, ViewChild, ViewEncapsulati
 import {ActivatedRoute} from '@angular/router';
 import {NgClass, NgForOf, NgIf} from '@angular/common';
 import {FormsModule} from '@angular/forms';
-import {Subscription} from 'rxjs';
 import {HomeComponent} from '../home/home.component';
 import {
-  Base64Util,
-  Channel,
   DataChannelService,
-  REQUEST_JOIN_DATA_CHANNEL, REQUEST_JOIN_MEDIA_CHANNEL,
-  SignalMsg,
   VideoChannelService,
-  WebsocketService
 } from 'webrtc-common';
 import {environment} from '../../environments/environment';
 
@@ -44,7 +38,6 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
   chatOpen = false;
   newMessage = '';
   messages: { text: string; from: string }[] = [];
-  msgSubscription: Subscription | null = null
   dataChannelSvc: DataChannelService
   videoChannelSvc!: VideoChannelService;
   remoteStreams: { [userId: string]: MediaStream } = {};
@@ -116,80 +109,45 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     }
   }
 
-  // private initVideoChannel() {
-  //   this.videoChannelSvc = new VideoChannelService(
-  //     this.sid,
-  //     this.roomId,
-  //     this.websocketSvc.send.bind(this.websocketSvc)
-  //   );
-  //
-  //   // Lắng nghe khi có remote stream mới từ peer
-  //   this.videoChannelSvc.toggleLocalVideo(true);
-  //   this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
-  //     this.remoteStreams[from] = stream;
-  //     let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
-  //     if (!videoEl) {
-  //       const grid = document.querySelector('.participant-grid');
-  //       if (grid) {
-  //         // Tạo div tile
-  //         const tileDiv = document.createElement('div');
-  //         tileDiv.className = 'tile';
-  //
-  //         // Tạo video element
-  //         videoEl = document.createElement('video');
-  //         videoEl.id = 'video-' + from;
-  //         videoEl.autoplay = true;
-  //         videoEl.playsInline = true;
-  //         videoEl.className = 'dynamic-video'; // Thêm class
-  //
-  //         // Thêm video vào tile, tile vào grid
-  //         tileDiv.appendChild(videoEl);
-  //         grid.appendChild(tileDiv);
-  //       }
-  //     }
-  //     videoEl.srcObject = stream;
-  //   });
-  //   // Bắt đầu video call
-  //   // Request video call broadcast
-  //   const msg: SignalMsg = {
-  //     msg: REQUEST_JOIN_MEDIA_CHANNEL,
-  //     from: this.sid,
-  //     channel: Channel.Webrtc,
-  //     roomId: this.roomId
-  //   }
-  //   this.websocketSvc.send(msg)
-  // }
+  private initVideoChannel() {
+    if (!this.videoChannelSvc) {
+      this.videoChannelSvc = new VideoChannelService(
+        this.sid,
+        this.roomId,
+        null,
+        environment.socket
+      );
+    }
+    // insert video element khi có remote stream connected
+    this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
+      this.remoteStreams[from] = stream;
+      let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
+      if (!videoEl) {
+        const grid = document.querySelector('.participant-grid');
+        if (grid) {
+          // Tạo div tile
+          const tileDiv = document.createElement('div');
+          tileDiv.className = 'tile';
 
-  /**
-   * Process signaling messages exchange for webrtc
-   * @param message signaling message
-   */
-  async handlerSignalMessage(message: SignalMsg) {
-    try {
-      console.log(`handlerSignalMessage \n ${Base64Util.base64ToObject(message.msg, true)}`)
-    } catch (_e) {
-    }
-    switch (message.msg) {
-      case REQUEST_JOIN_MEDIA_CHANNEL:
-        if (this.isMaster) {
-          this.showConfirmToast(`${message.from} want to join video call!`, () => {
-            this.videoChannelSvc.createVideoPeerConnection(message.from, true)
-          })
-        } else {
-          await this.videoChannelSvc.createVideoPeerConnection(message.from, true)
+          // Tạo video element
+          videoEl = document.createElement('video');
+          videoEl.id = 'video-' + from;
+          videoEl.autoplay = true;
+          videoEl.playsInline = true;
+          videoEl.className = 'dynamic-video'; // Thêm class
+
+          // Thêm video vào tile, tile vào grid
+          tileDiv.appendChild(videoEl);
+          grid.appendChild(tileDiv);
         }
-        break
-      default:
-        // handling webrtc message signaling events
-        if (message.channel && message.channel === Channel.Webrtc) {
-          await this.videoChannelSvc.handleSignalingData(message);
-        }
-    }
+      }
+      videoEl.srcObject = stream;
+    });
   }
 
   // ----------------- Điều khiển Media --------------------
   private async enableMedia() {
-    // this.initVideoChannel();
+    this.initVideoChannel();
     this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
     this.localVideo.nativeElement.srcObject = this.stream;
     await this.videoChannelSvc.setLocalStream(this.stream);
@@ -208,7 +166,6 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     if (enabled) {
       videoTrack.enabled = enabled
     }
-    this.videoChannelSvc.toggleLocalVideo(videoTrack.enabled)
   }
 
   toggleMic() {
@@ -300,6 +257,8 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     this.toastYesCallback = null;
   }
 
+  // eslint-disable-next-line @angular-eslint/no-empty-lifecycle-method
+  // noinspection JSUnusedGlobalSymbols
   ngAfterViewChecked(): void {
     // Gán lại srcObject cho tất cả video remote
     this.remoteUsers.forEach(user => {

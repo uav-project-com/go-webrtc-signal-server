@@ -1,5 +1,9 @@
 import {Channel, SignalMsg, SignalType} from './dto/SignalMsg';
 import {Base64Util} from './common/Base64Util';
+import {WebsocketService} from './websocket.service';
+import {Subscription} from 'rxjs';
+import {CommonRtc} from './common/common-rtc';
+import {REQUEST_JOIN_MEDIA_CHANNEL} from './common/const';
 
 /**
  * VideoChannelService
@@ -14,32 +18,79 @@ export class VideoChannelService extends EventTarget {
   };
   private readonly userId: string;
   private readonly roomId: string;
-  private readonly sendSignaling: any;
 
   private peers: { [sid: string]: RTCPeerConnection } = {};
   private streams: { [sid: string]: MediaStream } = {};
   private pendingCandidates: { [sid: string]: any[] } = {};
   private localStream: MediaStream | null = null;
 
-  constructor(userId: string, roomName: string, sendSignalMessageCallback: any)
+  private readonly websocketSvc: WebsocketService
+  private readonly isMaster: any
+  msgSubscription: Subscription | null = null
+  private readonly confirmJoinCb: any;
+
+  constructor(userId: string, roomName: string, isMaster: boolean, socketUrl: any)
   /**
    * Khởi tạo VideoChannelService
    * @param userId - ID của user hiện tại
    * @param roomName - Tên phòng
-   * @param sendSignalMessageCallback - Hàm gửi signaling (qua websocket)
+   * @param isMaster mark as master room
+   * @param socketUrl - for sending signal message, usually use websocket
    * @param signalServers - Cấu hình ICE server (tùy chọn)
    */
-  constructor(userId: string, roomName: string, sendSignalMessageCallback: any, signalServers?: RTCConfiguration) {
+  constructor(userId: string, roomName: string, isMaster: any, socketUrl: any, signalServers?: RTCConfiguration) {
     super();
     if (signalServers) {
       this.config = signalServers;
     }
     this.userId = userId;
     this.roomId = roomName;
-    this.sendSignaling = sendSignalMessageCallback;
+    this.isMaster = isMaster
+    // Auto init internal socket service for send signaling data
+    this.websocketSvc = new WebsocketService(socketUrl)
+    this.websocketSvc.connect(this.roomId, this.userId)
+    // Khi nhận được signaling message từ websocket
+    this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
+      console.log(`received ws: ${JSON.stringify(message)}`)
+      if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
+        // auto init data-channel for chat in real life logic
+        this.initVideoCall()
+      } else if (message.msg === REQUEST_JOIN_MEDIA_CHANNEL) {
+        if (this.isMaster === 'true') {
+          if (this.confirmJoinCb) {
+            this.confirmJoinCb(`${message.from} want to join this room!`, () => {
+              this.createVideoPeerConnection(message.from, this.isMaster).then()
+            })
+          } else {
+            this.createVideoPeerConnection(message.from, this.isMaster).then()
+          }
+        } else {
+          this.createVideoPeerConnection(message.from, this.isMaster).then()
+        }
+      } else if (CommonRtc.isSignalMsg(message) && message.channel === Channel.Webrtc) {
+        await this.handleSignalingData(message)
+      }
+    })
   }
 
   // ----------------- WebRTC Core ------------------------
+
+  private initVideoCall() {
+    // Lắng nghe khi có remote stream mới từ peer
+    this.toggleLocalVideo(true); // enabled local stream
+    if (!this.isMaster) {
+      // Bắt đầu video call
+      // Request video call broadcast
+      const msg: SignalMsg = {
+        msg: REQUEST_JOIN_MEDIA_CHANNEL,
+        from: this.userId,
+        channel: Channel.Webrtc,
+        roomId: this.roomId
+      }
+      this.websocketSvc.send(msg)
+    }
+  }
+
   /**
    * Thiết lập local stream cho user hiện tại và add vào tất cả peer connection đã có
    * @param stream - MediaStream local
@@ -58,7 +109,7 @@ export class VideoChannelService extends EventTarget {
    * @param sid - userId của peer
    * @param isCaller - true nếu là người khởi tạo offer
    */
-  public async createVideoPeerConnection(sid: string, isCaller: boolean) {
+  private async createVideoPeerConnection(sid: string, isCaller: any) {
     const peer = new RTCPeerConnection(this.config);
 
     // Add local stream tracks
@@ -79,7 +130,7 @@ export class VideoChannelService extends EventTarget {
           from: this.userId,
           to: sid
         };
-        this.sendSignaling(msg);
+        this.websocketSvc.send(msg);
       } else {
         console.log('ICE gathering complete');
       }
@@ -101,7 +152,7 @@ export class VideoChannelService extends EventTarget {
     };
 
     // Nếu là caller, tạo offer và gửi cho peer
-    if (isCaller) {
+    if (isCaller === 'true' || isCaller === null || isCaller === undefined) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       const msg: SignalMsg = {
@@ -111,7 +162,7 @@ export class VideoChannelService extends EventTarget {
         from: this.userId,
         to: sid
       };
-      this.sendSignaling(msg);
+      this.websocketSvc.send(msg);
     }
     this.peers[sid] = peer;
   }
@@ -144,7 +195,7 @@ export class VideoChannelService extends EventTarget {
           from: this.userId,
           to: sid
         };
-        this.sendSignaling(answerMsg);
+        this.websocketSvc.send(answerMsg);
         await this.getAndClearPendingCandidates(sid);
         break;
       }

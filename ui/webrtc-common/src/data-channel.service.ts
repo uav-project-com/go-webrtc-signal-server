@@ -40,21 +40,21 @@ export class DataChannelService extends EventTarget {
       if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
         // auto init data-channel for chat in real life logic
         this.initDataChannel()
-      } else if (CommonRtc.isSignalMsg(message) && message.channel === Channel.DataRtc) {
-        await this.handleSignalingData(message)
       } else if (message.msg === REQUEST_JOIN_DATA_CHANNEL) {
         // (#2) A nhận được: Thông báo B1 join
         if (this.isMaster) {
           if (this.confirmJoinCb) {
             this.confirmJoinCb(`${message.from} want to join this room!`, () => {
-              this.createDataChannelConnection(message.from, true).then()
+              this.createDataChannelConnection(message.from, this.isMaster).then()
             })
           } else {
-            this.createDataChannelConnection(message.from, true).then()
+            this.createDataChannelConnection(message.from, this.isMaster).then()
           }
         } else {
-          this.createDataChannelConnection(message.from, true).then()
+          this.createDataChannelConnection(message.from, this.isMaster).then()
         }
+      } else if (CommonRtc.isSignalMsg(message) && message.channel === Channel.DataRtc) {
+        await this.handleSignalingData(message)
       }
     })
   }
@@ -184,19 +184,12 @@ export class DataChannelService extends EventTarget {
     this.pendingCandidates[sid].push(candidate)
   }
 
-// -----------------Public functions----------------------------
-
-  public onDestroy() {
-    this.msgSubscription?.unsubscribe()
-    this.websocketSvc?.close()
-  }
-
   /**
    * Init data-channel peer connection
    * @param sid peer id
    * @param isCaller true when this peer will be sent offer signal (who is joining to existing room)
    */
-  public async createDataChannelConnection(sid: string, isCaller: boolean) {
+  private async createDataChannelConnection(sid: string, isCaller: boolean) {
     console.log(`setup data channel for ${sid}`)
     // Unlike video, DataChannel requires a bidirectional connection:
     const peer = new RTCPeerConnection(this.config) // (#3) (#7)
@@ -260,6 +253,13 @@ export class DataChannelService extends EventTarget {
         console.log('datachannel connected!')
       }
     })
+  }
+
+// -----------------Public functions----------------------------
+
+  public onDestroy() {
+    this.msgSubscription?.unsubscribe()
+    this.websocketSvc?.close()
   }
 
   /**
