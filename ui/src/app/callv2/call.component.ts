@@ -1,4 +1,4 @@
-import {Component, ElementRef, OnInit, ViewChild, ViewEncapsulation} from '@angular/core';
+import {AfterViewInit, Component, ElementRef, OnInit, ViewChild, ViewEncapsulation} from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import {NgClass, NgForOf, NgIf} from '@angular/common';
 import {FormsModule} from '@angular/forms';
@@ -27,7 +27,7 @@ import {environment} from '../../environments/environment';
   styleUrls: ['./call.component.css'],
   encapsulation: ViewEncapsulation.None
 })
-export class CallComponentV2 implements OnInit {
+export class CallComponentV2 implements OnInit, AfterViewInit {
 
   // ----------------- Khởi tạo & Lifecycle -----------------
   constructor(private readonly route: ActivatedRoute) {}
@@ -47,7 +47,6 @@ export class CallComponentV2 implements OnInit {
   msgSubscription: Subscription | null = null
   dataChannelSvc: DataChannelService
   videoChannelSvc!: VideoChannelService;
-  websocketSvc: WebsocketService
   remoteStreams: { [userId: string]: MediaStream } = {};
 
 //   Toast
@@ -64,29 +63,34 @@ export class CallComponentV2 implements OnInit {
       this.sid = HomeComponent.randomName()
       console.log(`auto gen username: ${this.sid}`)
     }
-    this.isMaster = this.route.snapshot.paramMap.get('isMaster') || 'false'
+    const isMasterParam = this.route.snapshot.paramMap.get('isMaster');
+    const isMasterQuery = this.route.snapshot.queryParamMap.get('isMaster');
+    this.isMaster = isMasterParam ?? isMasterQuery ?? 'false';
     this.joinLink = `${window.location.origin}/webrtc-v2/${this.roomId}`;
     console.log('Room ID:', this.roomId);
     console.log('Session/User ID (sid):', this.sid);
-    // init websocket signaling client
-    this.websocketSvc = new WebsocketService(environment.socket)
-    this.websocketSvc.connect(this.roomId, this.sid)
 
-    // Khi nhận được signaling message từ websocket
-    this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
-      console.log(`received ws: ${JSON.stringify(message)}`)
-      if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
-        // auto init data-channel for chat in real life logic
-        await this.toggleCamera(true)
-      } else {
-        this.handlerMessage(message)
-      }
-    })
+    // // Khi nhận được signaling message từ websocket
+    // this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
+    //   console.log(`received ws: ${JSON.stringify(message)}`)
+    //   if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
+    //     // auto init data-channel for chat in real life logic
+    //     await this.toggleCamera(true)
+    //     this.initDataChannel()
+    //   } else {
+    //     this.handlerMessage(message)
+    //   }
+    // })
   }
 
+  ngAfterViewInit() {
+    this.initDataChannel()
+  }
+
+  // eslint-disable-next-line @angular-eslint/no-empty-lifecycle-method
+  // noinspection JSUnusedGlobalSymbols
   ngOnDestroy(): void {
-    this.msgSubscription?.unsubscribe()
-    this.websocketSvc.close()
+    this.dataChannelSvc.onDestroy()
   }
 
   // ----------------- WebRTC & Signaling ------------------
@@ -97,84 +101,64 @@ export class CallComponentV2 implements OnInit {
       this.dataChannelSvc = new DataChannelService(
         this.sid,
         this.roomId,
-        this.websocketSvc.send.bind(this.websocketSvc) // 👈 giữ nguyên context
+        this.isMaster === 'true',
+        environment.socket
       )
+      // Push message datachannel lên giao diện (UI controller)
       this.dataChannelSvc.addOnMessageEventListener((msg, sender) => {
         this.messages.push({ text: msg, from: sender });
         setTimeout(() => this.scrollToBottom(), 100);
       });
-      // sending broadcast request to join data-channel
-      if (this.isMaster === 'false') {
-        // (#1) B Yêu cầu join room 1234
-        const msg: SignalMsg = {
-          msg: REQUEST_JOIN_DATA_CHANNEL,
-          roomId: this.roomId,
-          from: this.sid,
-        }
-        this.websocketSvc.send(msg)
-      }
+      // Set toast confirm when new user request join chat:
+      this.dataChannelSvc.setToastConfirmJoinRoomCallBack(
+        this.showConfirmToast.bind(this)
+      );
     }
   }
 
-  private initVideoChannel() {
-    this.videoChannelSvc = new VideoChannelService(
-      this.sid,
-      this.roomId,
-      this.websocketSvc.send.bind(this.websocketSvc)
-    );
-
-    // Lắng nghe khi có remote stream mới từ peer
-    this.videoChannelSvc.toggleLocalVideo(true);
-    this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
-      this.remoteStreams[from] = stream;
-      let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
-      if (!videoEl) {
-        const grid = document.querySelector('.participant-grid');
-        if (grid) {
-          // Tạo div tile
-          const tileDiv = document.createElement('div');
-          tileDiv.className = 'tile';
-
-          // Tạo video element
-          videoEl = document.createElement('video');
-          videoEl.id = 'video-' + from;
-          videoEl.autoplay = true;
-          videoEl.playsInline = true;
-          videoEl.className = 'dynamic-video'; // Thêm class
-
-          // Thêm video vào tile, tile vào grid
-          tileDiv.appendChild(videoEl);
-          grid.appendChild(tileDiv);
-        }
-      }
-      videoEl.srcObject = stream;
-    });
-    // Bắt đầu video call
-    // Request video call broadcast
-    const msg: SignalMsg = {
-      msg: REQUEST_JOIN_MEDIA_CHANNEL,
-      from: this.sid,
-      channel: Channel.Webrtc,
-      roomId: this.roomId
-    }
-    this.websocketSvc.send(msg)
-  }
-
-  isSignalMsg(obj: any): obj is SignalMsg {
-    return (
-      obj !== null &&
-      typeof obj === 'object' &&
-      typeof obj.from === 'string' &&
-      'msg' in obj
-    )
-  }
-
-
-  handlerMessage(message: any) {
-    if (this.isSignalMsg(message)) {
-      this.handlerSignalMessage(message).then(_ => {})
-    }
-  }
+  // private initVideoChannel() {
+  //   this.videoChannelSvc = new VideoChannelService(
+  //     this.sid,
+  //     this.roomId,
+  //     this.websocketSvc.send.bind(this.websocketSvc)
+  //   );
+  //
+  //   // Lắng nghe khi có remote stream mới từ peer
+  //   this.videoChannelSvc.toggleLocalVideo(true);
+  //   this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
+  //     this.remoteStreams[from] = stream;
+  //     let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
+  //     if (!videoEl) {
+  //       const grid = document.querySelector('.participant-grid');
+  //       if (grid) {
+  //         // Tạo div tile
+  //         const tileDiv = document.createElement('div');
+  //         tileDiv.className = 'tile';
+  //
+  //         // Tạo video element
+  //         videoEl = document.createElement('video');
+  //         videoEl.id = 'video-' + from;
+  //         videoEl.autoplay = true;
+  //         videoEl.playsInline = true;
+  //         videoEl.className = 'dynamic-video'; // Thêm class
+  //
+  //         // Thêm video vào tile, tile vào grid
+  //         tileDiv.appendChild(videoEl);
+  //         grid.appendChild(tileDiv);
+  //       }
+  //     }
+  //     videoEl.srcObject = stream;
+  //   });
+  //   // Bắt đầu video call
+  //   // Request video call broadcast
+  //   const msg: SignalMsg = {
+  //     msg: REQUEST_JOIN_MEDIA_CHANNEL,
+  //     from: this.sid,
+  //     channel: Channel.Webrtc,
+  //     roomId: this.roomId
+  //   }
+  //   this.websocketSvc.send(msg)
+  // }
 
   /**
    * Process signaling messages exchange for webrtc
@@ -186,16 +170,6 @@ export class CallComponentV2 implements OnInit {
     } catch (_e) {
     }
     switch (message.msg) {
-      // (#2) A nhận được: Thông báo B1 join
-      case REQUEST_JOIN_DATA_CHANNEL:
-        if (this.isMaster) {
-          this.showConfirmToast(`${message.from} want to join this room!`, () => {
-            this.dataChannelSvc.createDataChannelConnection(message.from, true).then()
-          })
-        } else {
-          this.dataChannelSvc.createDataChannelConnection(message.from, true).then()
-        }
-        break
       case REQUEST_JOIN_MEDIA_CHANNEL:
         if (this.isMaster) {
           this.showConfirmToast(`${message.from} want to join video call!`, () => {
@@ -207,9 +181,7 @@ export class CallComponentV2 implements OnInit {
         break
       default:
         // handling webrtc message signaling events
-        if (message.channel && message.channel === Channel.DataRtc) {
-          this.dataChannelSvc.handleSignalingData(message).then()
-        } else if (message.channel && message.channel === Channel.Webrtc) {
+        if (message.channel && message.channel === Channel.Webrtc) {
           await this.videoChannelSvc.handleSignalingData(message);
         }
     }
@@ -217,7 +189,7 @@ export class CallComponentV2 implements OnInit {
 
   // ----------------- Điều khiển Media --------------------
   private async enableMedia() {
-    this.initVideoChannel();
+    // this.initVideoChannel();
     this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
     this.localVideo.nativeElement.srcObject = this.stream;
     await this.videoChannelSvc.setLocalStream(this.stream);
