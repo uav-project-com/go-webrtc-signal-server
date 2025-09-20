@@ -27,6 +27,7 @@ export class VideoChannelService extends EventTarget {
   private readonly websocketSvc: WebsocketService
   private readonly isMaster: any
   msgSubscription: Subscription | null = null
+  // callback confirm to join from master's room
   private readonly confirmJoinCb: any;
 
   constructor(userId: string, roomName: string, isMaster: boolean, socketUrl: any)
@@ -89,19 +90,6 @@ export class VideoChannelService extends EventTarget {
       }
       this.websocketSvc.send(msg)
     }
-  }
-
-  /**
-   * Thiết lập local stream cho user hiện tại và add vào tất cả peer connection đã có
-   * @param stream - MediaStream local
-   */
-  public async setLocalStream(stream: MediaStream) {
-    this.localStream = stream;
-    Object.values(this.peers).forEach(peer => {
-      stream.getTracks().forEach(track => {
-        peer.addTrack(track, stream);
-      });
-    });
   }
 
   /**
@@ -171,7 +159,7 @@ export class VideoChannelService extends EventTarget {
    * Xử lý signaling message nhận được từ server (offer/answer/candidate)
    * @param message - SignalMsg từ peer khác
    */
-  public async handleSignalingData(message: SignalMsg) {
+  private async handleSignalingData(message: SignalMsg) {
     const data = Base64Util.isBase64(message.msg)
       ? Base64Util.base64ToObject(message.msg)
       : message.msg;
@@ -241,6 +229,19 @@ export class VideoChannelService extends EventTarget {
     console.log(`Adding pending candidate ${sid}`)
     this.pendingCandidates[sid].push(candidate);
   }
+// =============================== P U B L I C  F U N C T I O N ========================================================
+  /**
+   * Thiết lập local stream cho user hiện tại và add vào tất cả peer connection đã có
+   * @param stream - MediaStream local
+   */
+  public async setLocalStream(stream: MediaStream) {
+    this.localStream = stream;
+    Object.values(this.peers).forEach(peer => {
+      stream.getTracks().forEach(track => {
+        peer.addTrack(track, stream);
+      });
+    });
+  }
 
   /**
    * Lấy remote stream của một peer theo userId
@@ -249,6 +250,14 @@ export class VideoChannelService extends EventTarget {
    */
   public getRemoteStream(sid: string): MediaStream | undefined {
     return this.streams[sid];
+  }
+
+  public getRemoteStreams() {
+    return this.streams;
+  }
+
+  public getLocalStream(): MediaStream | null {
+    return this.localStream;
   }
 
   // ----------------- Điều khiển Media --------------------

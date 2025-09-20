@@ -28,7 +28,6 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   remoteUsers: string[] = ['user1', 'user2']; // dummy IDs
   isMinimized = false;
-  stream!: MediaStream;
 
   roomId = '';
   joinLink = ''
@@ -62,18 +61,6 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     this.joinLink = `${window.location.origin}/webrtc-v2/${this.roomId}`;
     console.log('Room ID:', this.roomId);
     console.log('Session/User ID (sid):', this.sid);
-
-    // // Khi nhận được signaling message từ websocket
-    // this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
-    //   console.log(`received ws: ${JSON.stringify(message)}`)
-    //   if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
-    //     // auto init data-channel for chat in real life logic
-    //     await this.toggleCamera(true)
-    //     this.initDataChannel()
-    //   } else {
-    //     this.handlerMessage(message)
-    //   }
-    // })
   }
 
   ngAfterViewInit() {
@@ -102,7 +89,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
         this.messages.push({ text: msg, from: sender });
         setTimeout(() => this.scrollToBottom(), 100);
       });
-      // Set toast confirm when new user request join chat:
+      // Set toast confirm when new user request join chat: (optional)
       this.dataChannelSvc.setToastConfirmJoinRoomCallBack(
         this.showConfirmToast.bind(this)
       );
@@ -121,56 +108,57 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     // insert video element khi có remote stream connected
     this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
       this.remoteStreams[from] = stream;
-      let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
-      if (!videoEl) {
-        const grid = document.querySelector('.participant-grid');
-        if (grid) {
-          // Tạo div tile
-          const tileDiv = document.createElement('div');
-          tileDiv.className = 'tile';
-
-          // Tạo video element
-          videoEl = document.createElement('video');
-          videoEl.id = 'video-' + from;
-          videoEl.autoplay = true;
-          videoEl.playsInline = true;
-          videoEl.className = 'dynamic-video'; // Thêm class
-
-          // Thêm video vào tile, tile vào grid
-          tileDiv.appendChild(videoEl);
-          grid.appendChild(tileDiv);
-        }
-      }
-      videoEl.srcObject = stream;
+      this.remoteVideoHtmlCallback(from, stream);
     });
   }
 
-  // ----------------- Điều khiển Media --------------------
+  private remoteVideoHtmlCallback(from: string, stream: MediaStream) {
+    let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
+    if (!videoEl) {
+      const grid = document.querySelector('.participant-grid');
+      if (grid) {
+        // Tạo div tile
+        const tileDiv = document.createElement('div');
+        tileDiv.className = 'tile';
+
+        // Tạo video element
+        videoEl = document.createElement('video');
+        videoEl.id = 'video-' + from;
+        videoEl.autoplay = true;
+        videoEl.playsInline = true;
+        videoEl.className = 'dynamic-video'; // Thêm class
+
+        // Thêm video vào tile, tile vào grid
+        tileDiv.appendChild(videoEl);
+        grid.appendChild(tileDiv);
+      }
+    }
+    videoEl.srcObject = stream;
+  }
+
+// ----------------- Điều khiển Media --------------------
   private async enableMedia() {
     this.initVideoChannel();
-    this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    this.localVideo.nativeElement.srcObject = this.stream;
-    await this.videoChannelSvc.setLocalStream(this.stream);
+    let stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    this.localVideo.nativeElement.srcObject = stream;
+    await this.videoChannelSvc.setLocalStream(stream);
   }
 
   hangUp() {
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
+    if (this.videoChannelSvc.getLocalStream()) {
+      this.videoChannelSvc.getLocalStream().getTracks().forEach(track => track.stop());
     }
   }
 
-  toggleCamera(enabled?: boolean) {
-    if (!this.stream) return this.enableMedia();
-    const videoTrack = this.stream.getVideoTracks()[0];
+  toggleCamera() {
+    if (!this.videoChannelSvc?.getLocalStream()) return this.enableMedia();
+    const videoTrack = this.videoChannelSvc.getLocalStream().getVideoTracks()[0];
     videoTrack.enabled = !videoTrack.enabled;
-    if (enabled) {
-      videoTrack.enabled = enabled
-    }
   }
 
   toggleMic() {
-    if (!this.stream) return this.enableMedia();
-    const audioTrack = this.stream.getAudioTracks()[0];
+    if (!this.videoChannelSvc.getLocalStream()) return this.enableMedia();
+    const audioTrack = this.videoChannelSvc.getLocalStream().getAudioTracks()[0];
     audioTrack.enabled = !audioTrack.enabled;
   }
 
