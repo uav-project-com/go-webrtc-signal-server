@@ -73,7 +73,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     this.dataChannelSvc.onDestroy()
   }
 
-  // ----------------- WebRTC & Signaling ------------------
+// ================================== WebRTC & Signaling ===============================================================
   private initDataChannel() {
     if (this.dataChannelSvc == null) {
       // isMaster = true:  (#0) A tạo room ID=1234 và chờ người khác join
@@ -96,7 +96,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     }
   }
 
-  private initVideoChannel() {
+  private async initVideoChannel() {
     if (!this.videoChannelSvc) {
       this.videoChannelSvc = new VideoChannelService(
         this.sid,
@@ -107,11 +107,23 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     }
     // insert video element khi có remote stream connected
     this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
+      console.log(`Received new stream: ${from}`)
       this.remoteStreams[from] = stream;
       this.remoteVideoHtmlCallback(from, stream);
     });
+    await this.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
+      this.localVideo.nativeElement.srcObject = stream; // add local media to html element
+    })
   }
 
+// ----------------- Điều khiển Media ----------------------------------------------------------------------
+
+  /**
+   * Render remote videos
+   * @param from caller id
+   * @param stream remote stream
+   * @private
+   */
   private remoteVideoHtmlCallback(from: string, stream: MediaStream) {
     let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
     if (!videoEl) {
@@ -136,33 +148,38 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     videoEl.srcObject = stream;
   }
 
-// ----------------- Điều khiển Media --------------------
-  private async enableMedia() {
-    this.initVideoChannel();
-    let stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    this.localVideo.nativeElement.srcObject = stream;
-    await this.videoChannelSvc.setLocalStream(stream);
-  }
-
   hangUp() {
-    if (this.videoChannelSvc.getLocalStream()) {
-      this.videoChannelSvc.getLocalStream().getTracks().forEach(track => track.stop());
-    }
+    this.videoChannelSvc.hangUp();
   }
 
   toggleCamera() {
-    if (!this.videoChannelSvc?.getLocalStream()) return this.enableMedia();
-    const videoTrack = this.videoChannelSvc.getLocalStream().getVideoTracks()[0];
-    videoTrack.enabled = !videoTrack.enabled;
+    if (!this.videoChannelSvc || !this.videoChannelSvc.getLocalStream()) this.initVideoChannel().then(_ => {
+    })
+    this.videoChannelSvc.toggleLocalVideo()
   }
 
   toggleMic() {
-    if (!this.videoChannelSvc.getLocalStream()) return this.enableMedia();
-    const audioTrack = this.videoChannelSvc.getLocalStream().getAudioTracks()[0];
-    audioTrack.enabled = !audioTrack.enabled;
+    if (!this.videoChannelSvc || !this.videoChannelSvc.getLocalStream()) this.initVideoChannel().then(_ => {
+    })
+    this.videoChannelSvc.toggleLocalMic()
   }
 
-  // ----------------- Data Channel Chat -------------------
+  // eslint-disable-next-line @angular-eslint/no-empty-lifecycle-method
+  // noinspection JSUnusedGlobalSymbols
+  /**
+   * Re-render remote videos
+   */
+  ngAfterViewChecked(): void {
+    // Gán lại srcObject cho tất cả video remote
+    this.remoteUsers.forEach(user => {
+      const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
+      if (videoEl && this.remoteStreams[user] && videoEl.srcObject !== this.remoteStreams[user]) {
+        videoEl.srcObject = this.remoteStreams[user];
+      }
+    });
+  }
+
+  // ----------------- Data Channel Chat -----------------------------------------------------------------------
   toggleChat() {
     this.initDataChannel()
     this.chatOpen = !this.chatOpen;
@@ -199,7 +216,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     if (el) el.scrollTop = el.scrollHeight;
   }
 
-  // ----------------- UI & Toast -------------------------
+  // ----------------- UI & Toast ------------------------------------------------------------------------------
   copyLink() {
     navigator.clipboard.writeText(this.joinLink).then(_ => {});
   }
@@ -243,17 +260,5 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
   onToastNo() {
     this.showToast = false;
     this.toastYesCallback = null;
-  }
-
-  // eslint-disable-next-line @angular-eslint/no-empty-lifecycle-method
-  // noinspection JSUnusedGlobalSymbols
-  ngAfterViewChecked(): void {
-    // Gán lại srcObject cho tất cả video remote
-    this.remoteUsers.forEach(user => {
-      const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
-      if (videoEl && this.remoteStreams[user] && videoEl.srcObject !== this.remoteStreams[user]) {
-        videoEl.srcObject = this.remoteStreams[user];
-      }
-    });
   }
 }

@@ -126,6 +126,7 @@ export class VideoChannelService extends EventTarget {
 
     // Nhận stream từ peer
     peer.ontrack = (event: RTCTrackEvent) => {
+      console.log(`remote peer Ontrack: ${sid}`)
       if (!this.streams[sid]) {
         this.streams[sid] = new MediaStream();
       }
@@ -265,12 +266,11 @@ export class VideoChannelService extends EventTarget {
    * Bật/tắt video cho local stream
    * @param enabled - true để bật, false để tắt
    */
-  public toggleLocalVideo(enabled: boolean) {
+  public toggleLocalVideo(enabled?: boolean) {
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach(track => {
-        track.enabled = enabled;
+        track.enabled = <boolean>(!track.enabled || enabled);
       });
-      this.dispatchEvent(new CustomEvent('toggleVideo', {detail: {enabled}}));
     }
   }
 
@@ -278,12 +278,22 @@ export class VideoChannelService extends EventTarget {
    * Bật/tắt mic cho local stream
    * @param enabled - true để bật, false để tắt
    */
-  public toggleLocalMic(enabled: boolean) {
+  public toggleLocalMic(enabled?: boolean) {
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(track => {
-        track.enabled = enabled;
+        track.enabled = <boolean>(!track.enabled || enabled);
       });
-      this.dispatchEvent(new CustomEvent('toggleMic', {detail: {enabled}}));
+    }
+  }
+
+  public hangUp() {
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => track.stop());
+    }
+    for (let remoteStreamsKey in this.getRemoteStreams()) {
+      this.getRemoteStream(remoteStreamsKey)?.getTracks().forEach(track => {
+        track.stop()
+      })
     }
   }
 
@@ -300,25 +310,13 @@ export class VideoChannelService extends EventTarget {
   }
 
   /**
-   * Đăng ký lắng nghe event khi bật/tắt video
-   * @param listener - callback nhận trạng thái enabled
+   * getUserMedia and return to HTML control callback
+   * @param callback
    */
-  public addOnToggleVideoListener(listener: (enabled: boolean) => void) {
-    this.addEventListener('toggleVideo', (e: Event) => {
-      const customEvent = e as CustomEvent<{enabled: boolean}>;
-      listener(customEvent.detail.enabled);
-    });
-  }
-
-  /**
-   * Đăng ký lắng nghe event khi bật/tắt mic
-   * @param listener - callback nhận trạng thái enabled
-   */
-  public addOnToggleMicListener(listener: (enabled: boolean) => void) {
-    this.addEventListener('toggleMic', (e: Event) => {
-      const customEvent = e as CustomEvent<{enabled: boolean}>;
-      listener(customEvent.detail.enabled);
-    });
+  public async addOnLocalStream(callback: any) {
+    let stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+    callback(stream);
+    this.localStream = stream;
   }
 
 }
