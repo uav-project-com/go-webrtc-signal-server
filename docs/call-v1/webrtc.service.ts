@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import {MEDIA_TYPE, WebsocketService} from '../common/websocket.service';
-import {RoomInfo} from '../common/RoomInfo';
+import {MEDIA_TYPE, WebsocketService} from '../../ui/src/app/common/websocket.service';
+import {RoomInfo} from '../../ui/src/app/common/RoomInfo';
 
 @Injectable({
   providedIn: 'root'

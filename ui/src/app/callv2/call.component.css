@@ -42,21 +42,54 @@
   font-weight: bold;
 }
 
+/* Chiếm toàn bộ chiều cao cửa sổ để grid có reference */
 .video-room {
-  flex: 1;
-  position: relative;
-  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh; /* hoặc 100vh */
 }
 
+/* Grid tự chia cột tuỳ theo chiều rộng khung */
 .participant-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-content: start;
+  padding: 10px;
+  min-height: 400px;
+  grid-auto-rows: 1fr;
 }
 
-.participant-grid video {
+/* Mỗi tile là một khung 16:9 cố định – KHÔNG phụ thuộc resolution video */
+.tile {
+  position: relative;
   width: 100%;
-  background: black;
+  aspect-ratio: 16 / 9;       /* quan trọng: khoá tỷ lệ ô */
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Video chỉ là nội dung bên trong tile, không quyết định kích cỡ grid */
+.tile > video {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+  background: #222;
+  border-radius: 8px;
+}
+
+.dynamic-video {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+  background: #222;
   border-radius: 8px;
 }
 

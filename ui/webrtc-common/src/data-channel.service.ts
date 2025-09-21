@@ -1,27 +1,62 @@
-import {Channel, SignalMsg, SignalType} from './dto/SignalMsg';
-import {Base64Util} from './common/Base64Util';
+import {Channel, SignalMsg, SignalType} from './dto/SignalMsg'
+import {Base64Util} from './common/Base64Util'
+import {WebsocketService} from './websocket.service'
+import {Subscription} from 'rxjs'
+import {REQUEST_JOIN_DATA_CHANNEL} from './common/const';
+import {CommonRtc} from './common/common-rtc';
 
 export class DataChannelService extends EventTarget {
 
 // -----------------PrivateConstructor--------------------------
+  private readonly websocketSvc: WebsocketService
+  private readonly isMaster: boolean
+  msgSubscription: Subscription | null = null
+  private confirmJoinCb: any;
 
 
-  constructor(userId: string, roomName: string, sendSignalMessageCallback: any)
+  constructor(userId: string, roomName: string, isMaster: boolean, socketUrl: string)
   /**
    * Init data channel object
    * @param userId your uid
    * @param roomName name of socket room
-   * @param sendSignalMessageCallback for sending signal message, usually use websocket
+   * @param isMaster mark as master room
+   * @param socketUrl for sending signal message, usually use websocket
    * @param signalServers optional: when not use Google ICE server and deploy for your own
    */
-  constructor(userId: string, roomName: string, sendSignalMessageCallback: any, signalServers?: RTCConfiguration) {
+  constructor(userId: string, roomName: string, isMaster: boolean, socketUrl: string, signalServers?: RTCConfiguration) {
     super();
     if (signalServers) {
       this.config = signalServers
     }
     this.userId = userId
     this.roomId = roomName
-    this.sendSignaling = sendSignalMessageCallback
+    this.isMaster = isMaster
+    // Auto init internal socket service for send signaling data
+    this.websocketSvc = new WebsocketService(socketUrl)
+    this.websocketSvc.connect(this.roomId, this.userId)
+    // Khi nhận được signaling message từ websocket
+    this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
+      console.log(`received ws: ${JSON.stringify(message)}`)
+      if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
+        // auto init data-channel for chat in real life logic
+        this.initDataChannel()
+      } else if (message.msg === REQUEST_JOIN_DATA_CHANNEL) {
+        // (#2) A nhận được: Thông báo B1 join
+        if (this.isMaster) {
+          if (this.confirmJoinCb) {
+            this.confirmJoinCb(`${message.from} want to join this room!`, () => {
+              this.createDataChannelConnection(message.from, this.isMaster).then()
+            })
+          } else {
+            this.createDataChannelConnection(message.from, this.isMaster).then()
+          }
+        } else {
+          this.createDataChannelConnection(message.from, this.isMaster).then()
+        }
+      } else if (CommonRtc.isSignalMsg(message) && message.channel === Channel.DataRtc) {
+        await this.handleSignalingData(message)
+      }
+    })
   }
 
 // -----------------Private fields------------------------------
@@ -33,9 +68,6 @@ export class DataChannelService extends EventTarget {
   private readonly userId: string
   // need for create new room or join to room
   private readonly roomId: string
-  // interface for sending/exchange signal webrtc message like offer, answer, candidate... like websocket
-  private readonly sendSignaling: any
-
   // lưu các obj RTCPeerConnection khi cần broadcast message cho nhiều user trong room qua data-channel theo mesh
   private peers: { [sid: string]: any } = {};
   // lưu tạm thời các object offer khi mà state của peer chưa ready for offer nhưng lại nhận được offer từ peer khác
@@ -46,6 +78,19 @@ export class DataChannelService extends EventTarget {
 
 
 // -----------------Private functions---------------------------
+  private initDataChannel() {
+    // sending broadcast request to join data-channel
+    if (!this.isMaster) {
+      // (#1) B Yêu cầu join room 1234
+      const msg: SignalMsg = {
+        msg: REQUEST_JOIN_DATA_CHANNEL,
+        roomId: this.roomId,
+        from: this.userId,
+      }
+      this.websocketSvc.send(msg)
+    }
+  }
+
   /**
    * For dispatch on received message from data-channel
    * @param message incoming message
@@ -76,7 +121,7 @@ export class DataChannelService extends EventTarget {
         from: this.userId,
         to: sid
       }
-      this.sendSignaling(answerMsg) // (#12)
+      this.websocketSvc.send(answerMsg) // (#12)
       // Nếu tồn tại candidate được gửi từ trước khi pc đuược tạo, tiến hành add Pending Candidate
       await this.getAndClearPendingCandidates(sid)
     }
@@ -123,7 +168,7 @@ export class DataChannelService extends EventTarget {
    * Get candidates from list pending when other peers sent it too early
    * @param sid sender candidate
    */
-  private getAndClearPendingCandidates = async (sid: string) => {
+  private readonly getAndClearPendingCandidates = async (sid: string) => {
     if (sid in this.pendingCandidates) {
       for (const candidate of this.pendingCandidates[sid]) {
         await this.peers[sid]?.addIceCandidate(new RTCIceCandidate(candidate))
@@ -139,14 +184,12 @@ export class DataChannelService extends EventTarget {
     this.pendingCandidates[sid].push(candidate)
   }
 
-// -----------------Public functions----------------------------
-
   /**
    * Init data-channel peer connection
    * @param sid peer id
    * @param isCaller true when this peer will be sent offer signal (who is joining to existing room)
    */
-  public async createDataChannelConnection(sid: string, isCaller: boolean) {
+  private async createDataChannelConnection(sid: string, isCaller: boolean) {
     console.log(`setup data channel for ${sid}`)
     // Unlike video, DataChannel requires a bidirectional connection:
     const peer = new RTCPeerConnection(this.config) // (#3) (#7)
@@ -162,7 +205,7 @@ export class DataChannelService extends EventTarget {
           from: this.userId,
           to: sid
         }
-        this.sendSignaling(answerMsg)
+        this.websocketSvc.send(answerMsg)
       }
     }
 
@@ -201,7 +244,7 @@ export class DataChannelService extends EventTarget {
           from: this.userId,
           to: sid
         }
-        this.sendSignaling(data) // (#5)
+        this.websocketSvc.send(data) // (#5)
       })
     }
     peer.addEventListener('connectionstatechange', (_event: any) => {
@@ -210,6 +253,13 @@ export class DataChannelService extends EventTarget {
         console.log('datachannel connected!')
       }
     })
+  }
+
+// -----------------Public functions----------------------------
+
+  public onDestroy() {
+    this.msgSubscription?.unsubscribe()
+    this.websocketSvc?.close()
   }
 
   /**
@@ -226,10 +276,18 @@ export class DataChannelService extends EventTarget {
 
 // -----------------Events - callback---------------------------
   // event when received message from peer in data-channel
+  /**
+   * // Push message datachannel lên giao diện (UI controller)
+   * @param listener interactive with UI
+   */
   public addOnMessageEventListener(listener: (msg: string, from: string) => void) {
     this.addEventListener('message', (e: Event) => {
       const customEvent = e as CustomEvent<{ message: string; from: string }>;
       listener(customEvent.detail.message, customEvent.detail.from);
     });
+  }
+
+  public setToastConfirmJoinRoomCallBack = (callback: any) =>  {
+    this.confirmJoinCb = callback;
   }
 }

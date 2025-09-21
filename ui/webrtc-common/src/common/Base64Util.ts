@@ -1,6 +1,6 @@
 export class Base64Util {
   // ------------- util functions ------------------------------
-  public static base64ToObject = (str: string, toString?: boolean): string => {
+  public static readonly base64ToObject = (str: string, toString?: boolean): string => {
     try {
       const jsonStr = atob(str);
       return toString? jsonStr : JSON.parse(jsonStr); // chuyển sang object
@@ -9,7 +9,7 @@ export class Base64Util {
     }
   }
 
-  public static isBase64 = (str: string): boolean => {
+  public static readonly isBase64 = (str: string): boolean => {
     if (!str || str.length % 4 !== 0) {
       return false;
     }
