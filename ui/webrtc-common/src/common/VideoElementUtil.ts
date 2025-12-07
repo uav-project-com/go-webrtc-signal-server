@@ -1,5 +1,4 @@
 import {VideoChannelService} from '../video-channel.service';
-import {ElementRef} from '@angular/core';
 
 export class VideoElementUtil {
   static readonly micBtnClass = 'toggle-mic-btn'
@@ -100,8 +99,10 @@ export class VideoElementUtil {
    * Initialize control wiring. Pass the video service instance so UI buttons can call service methods.
    * Call this after `videoChannelSvc` is created.
    */
-  public static async initControls(videoSvc: VideoChannelService, localVideo: ElementRef<HTMLVideoElement>,
-                                   listRemoteStream: { [userId: string]: MediaStream }) {
+  public static async initControls(videoSvc: VideoChannelService, localVideo: HTMLVideoElement,
+                                   listRemoteStream: { [userId: string]: MediaStream },
+                                   userIds: string[]
+  ) {
     VideoElementUtil.videoChannelSvc = videoSvc
     // insert video element khi có remote stream connected
     VideoElementUtil.videoChannelSvc.addOnRemoteStreamListener((stream: MediaStream, from: string) => {
@@ -115,9 +116,32 @@ export class VideoElementUtil {
       VideoElementUtil.addVideoElement(stream, from, '.' + this.remoteVideoContainerClass);
     });
     await VideoElementUtil.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
-      localVideo.nativeElement.srcObject = stream; // add local media to html element
+      localVideo.srcObject = stream; // add local media to html element
     })
     VideoElementUtil.addToggleMicEvent()
     VideoElementUtil.addHangUpEvent()
+    this.ngAfterViewChecked(userIds, listRemoteStream)
+  }
+
+  /**
+   * ngAfterViewChecked trigger render again all remote videos
+   * @param userIds list userIds updated
+   * @param listRemoteStream list remote stream updated
+   */
+  private static ngAfterViewChecked(userIds: string[], listRemoteStream: { [userId: string]: MediaStream }) {
+    const observer = new MutationObserver(() => {
+      console.log('DOM changed');
+      // Gán lại srcObject cho tất cả video remote
+      userIds.forEach(user => {
+        const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
+        if (videoEl && listRemoteStream[user] && videoEl.srcObject !== listRemoteStream[user]) {
+          videoEl.srcObject = listRemoteStream[user];
+        }
+      });
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
 }

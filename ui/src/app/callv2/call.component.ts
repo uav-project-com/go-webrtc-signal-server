@@ -105,7 +105,12 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
         environment.socket
       );
       // init html control elements
-      await VideoElementUtil.initControls(this.videoChannelSvc, this.localVideo, this.remoteStreams).then()
+      await VideoElementUtil.initControls(
+        this.videoChannelSvc,
+        this.localVideo.nativeElement,
+        this.remoteStreams,
+        this.remoteUsers
+      ).then()
     }
   }
 
@@ -116,20 +121,6 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
       this.initVideoChannel().then()
     }
     this.videoChannelSvc.toggleLocalVideo()
-  }
-  // eslint-disable-next-line @angular-eslint/no-empty-lifecycle-method
-  // noinspection JSUnusedGlobalSymbols
-  /**
-   * Re-render remote videos
-   */
-  ngAfterViewChecked(): void {
-    // Gán lại srcObject cho tất cả video remote
-    this.remoteUsers.forEach(user => {
-      const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
-      if (videoEl && this.remoteStreams[user] && videoEl.srcObject !== this.remoteStreams[user]) {
-        videoEl.srcObject = this.remoteStreams[user];
-      }
-    });
   }
 
   // ----------------- Data Channel Chat -----------------------------------------------------------------------
