@@ -5,7 +5,7 @@ import {FormsModule} from '@angular/forms';
 import {HomeComponent} from '../home/home.component';
 import {
   DataChannelService,
-  VideoChannelService,
+  VideoChannelService, VideoElementUtil,
 } from 'webrtc-common';
 import {environment} from '../../environments/environment';
 
@@ -109,7 +109,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
       console.log(`Received new stream: ${from}`)
       this.remoteStreams[from] = stream;
-      this.remoteVideoHtmlCallback(from, stream);
+      VideoElementUtil.addVideoElement(stream, from, '.participant-grid');
     });
     await this.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
       this.localVideo.nativeElement.srcObject = stream; // add local media to html element
@@ -117,37 +117,6 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
   }
 
 // ----------------- Điều khiển Media ----------------------------------------------------------------------
-
-  /**
-   * Render remote videos
-   * @param from caller id
-   * @param stream remote stream
-   * @private
-   */
-  private remoteVideoHtmlCallback(from: string, stream: MediaStream) {
-    let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
-    if (!videoEl) {
-      const grid = document.querySelector('.participant-grid');
-      if (grid) {
-        // Tạo div tile
-        const tileDiv = document.createElement('div');
-        tileDiv.className = 'tile';
-
-        // Tạo video element
-        videoEl = document.createElement('video');
-        videoEl.id = 'video-' + from;
-        videoEl.autoplay = true;
-        videoEl.playsInline = true;
-        videoEl.className = 'dynamic-video'; // Thêm class
-
-        // Thêm video vào tile, tile vào grid
-        tileDiv.appendChild(videoEl);
-        grid.appendChild(tileDiv);
-      }
-    }
-    videoEl.srcObject = stream;
-  }
-
   hangUp() {
     this.videoChannelSvc.hangUp();
   }
