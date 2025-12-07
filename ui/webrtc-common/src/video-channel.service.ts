@@ -72,6 +72,7 @@ export class VideoChannelService extends EventTarget {
         await this.handleSignalingData(message)
       }
     })
+    console.warn('Hint: call VideoElementUtil.initControls() for automatic setting html for local/remote video element after init this object')
   }
 
   // ----------------- WebRTC Core ------------------------
@@ -271,8 +272,6 @@ export class VideoChannelService extends EventTarget {
       this.localStream.getVideoTracks().forEach(track => {
         track.enabled = (!track.enabled || (enabled != null && enabled));
       });
-    } else {
-      console.error('Must init video first')
     }
   }
 

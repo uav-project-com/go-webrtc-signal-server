@@ -104,24 +104,16 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
         null,
         environment.socket
       );
+      // init html control elements
+      await VideoElementUtil.initControls(this.videoChannelSvc, this.localVideo, this.remoteStreams).then()
     }
-    // insert video element khi có remote stream connected
-    this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
-      console.log(`Received new stream: ${from}`)
-      this.remoteStreams[from] = stream;
-      VideoElementUtil.addVideoElement(stream, from, '.participant-grid');
-    });
-    await this.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
-      this.localVideo.nativeElement.srcObject = stream; // add local media to html element
-    })
-    return this.videoChannelSvc
   }
 
 // ----------------- Điều khiển Media ----------------------------------------------------------------------
 
   toggleCamera() {
     if (!this.videoChannelSvc) {
-      VideoElementUtil.initControls(this.initVideoChannel.bind(this))
+      this.initVideoChannel().then()
     }
     this.videoChannelSvc.toggleLocalVideo()
   }

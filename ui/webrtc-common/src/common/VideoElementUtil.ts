@@ -1,12 +1,13 @@
-import {VideoChannelService} from "../video-channel.service";
+import {VideoChannelService} from '../video-channel.service';
+import {ElementRef} from '@angular/core';
 
 export class VideoElementUtil {
   static readonly micBtnClass = 'toggle-mic-btn'
-  static readonly camBtnClass = 'toggle-cam-btn'
   static readonly hangUpClass = 'hangup'
+  static readonly remoteVideoContainerClass = 'participant-grid'
 
   // holds a reference to the VideoChannelService (or compatible object)
-  private static videoSvc: any = null
+  private static videoChannelSvc: any = null
 
   /**
    * Adds a video element to the DOM for a given stream and user ID.
@@ -75,8 +76,8 @@ export class VideoElementUtil {
   }
 
   private static readonly _onHangUp = () => {
-  if (VideoElementUtil.videoSvc && typeof VideoElementUtil.videoSvc.hangUp === 'function') {
-    VideoElementUtil.videoSvc.hangUp()
+  if (VideoElementUtil.videoChannelSvc && typeof VideoElementUtil.videoChannelSvc.hangUp === 'function') {
+    VideoElementUtil.videoChannelSvc.hangUp()
   } else {
     console.warn('VideoElementUtil: videoSvc or hangUp() not available')
   }
@@ -84,9 +85,9 @@ export class VideoElementUtil {
 
   private static readonly _onMicClick = () => {
     console.log('VideoElementUtil: toggle mic clicked')
-    if (VideoElementUtil.videoSvc && typeof VideoElementUtil.videoSvc.toggleLocalMic === 'function') {
+    if (VideoElementUtil.videoChannelSvc && typeof VideoElementUtil.videoChannelSvc.toggleLocalMic === 'function') {
       try {
-        VideoElementUtil.videoSvc.toggleLocalMic()
+        VideoElementUtil.videoChannelSvc.toggleLocalMic()
       } catch (err) {
         console.warn('VideoElementUtil: error invoking toggleLocalMic', err)
       }
@@ -99,8 +100,23 @@ export class VideoElementUtil {
    * Initialize control wiring. Pass the video service instance so UI buttons can call service methods.
    * Call this after `videoChannelSvc` is created.
    */
-  public static initControls(initVideoCallback: () => Promise<VideoChannelService>) {
-    VideoElementUtil.videoSvc = initVideoCallback()
+  public static async initControls(videoSvc: VideoChannelService, localVideo: ElementRef<HTMLVideoElement>,
+                                   listRemoteStream: { [userId: string]: MediaStream }) {
+    VideoElementUtil.videoChannelSvc = videoSvc
+    // insert video element khi có remote stream connected
+    VideoElementUtil.videoChannelSvc.addOnRemoteStreamListener((stream: MediaStream, from: string) => {
+      console.log(`Received new stream: ${from}`)
+      listRemoteStream[from] = stream;
+      const containerRemoteVideoElement =
+        document.getElementsByClassName(this.remoteVideoContainerClass)
+      if (containerRemoteVideoElement.length !== 1) {
+        console.warn(`Container class remote video not found or duplicated: ${this.remoteVideoContainerClass}`)
+      }
+      VideoElementUtil.addVideoElement(stream, from, '.' + this.remoteVideoContainerClass);
+    });
+    await VideoElementUtil.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
+      localVideo.nativeElement.srcObject = stream; // add local media to html element
+    })
     VideoElementUtil.addToggleMicEvent()
     VideoElementUtil.addHangUpEvent()
   }
