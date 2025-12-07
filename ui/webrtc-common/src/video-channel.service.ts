@@ -269,8 +269,10 @@ export class VideoChannelService extends EventTarget {
   public toggleLocalVideo(enabled?: boolean) {
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach(track => {
-        track.enabled = <boolean>(!track.enabled || enabled);
+        track.enabled = (!track.enabled || (enabled != null && enabled));
       });
+    } else {
+      console.error('Must init video first')
     }
   }
 
@@ -281,7 +283,7 @@ export class VideoChannelService extends EventTarget {
   public toggleLocalMic(enabled?: boolean) {
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(track => {
-        track.enabled = <boolean>(!track.enabled || enabled);
+        track.enabled = (!track.enabled || (enabled != null && enabled));
       });
     }
   }
@@ -290,7 +292,8 @@ export class VideoChannelService extends EventTarget {
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
     }
-    for (let remoteStreamsKey in this.getRemoteStreams()) {
+    // tslint:disable-next-line:forin
+    for (const remoteStreamsKey in this.getRemoteStreams()) {
       this.getRemoteStream(remoteStreamsKey)?.getTracks().forEach(track => {
         track.stop()
       })
@@ -314,7 +317,7 @@ export class VideoChannelService extends EventTarget {
    * @param callback
    */
   public async addOnLocalStream(callback: any) {
-    let stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+    const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
     callback(stream);
     this.localStream = stream;
   }

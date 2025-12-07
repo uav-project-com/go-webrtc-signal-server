@@ -114,25 +114,17 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     await this.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
       this.localVideo.nativeElement.srcObject = stream; // add local media to html element
     })
+    return this.videoChannelSvc
   }
 
 // ----------------- Điều khiển Media ----------------------------------------------------------------------
-  hangUp() {
-    this.videoChannelSvc.hangUp();
-  }
 
   toggleCamera() {
-    if (!this.videoChannelSvc || !this.videoChannelSvc.getLocalStream()) this.initVideoChannel().then(_ => {
-    })
+    if (!this.videoChannelSvc) {
+      VideoElementUtil.initControls(this.initVideoChannel.bind(this))
+    }
     this.videoChannelSvc.toggleLocalVideo()
   }
-
-  toggleMic() {
-    if (!this.videoChannelSvc || !this.videoChannelSvc.getLocalStream()) this.initVideoChannel().then(_ => {
-    })
-    this.videoChannelSvc.toggleLocalMic()
-  }
-
   // eslint-disable-next-line @angular-eslint/no-empty-lifecycle-method
   // noinspection JSUnusedGlobalSymbols
   /**
