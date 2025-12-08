@@ -56,3 +56,12 @@ Connected (press CTRL+C to quit)
 Connected (press CTRL+C to quit)
 < {"from":"alice","to":"bob","msg":"Hello Bob","roomId":"1234"}
 ```
+
+## 2. WebRTC Golang client for UAV
+### 1. Init project
+```bash
+cd go-webrtc-signal-server/ui/go-client
+go mod init github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client
+# update project lib
+go mod tidy
+```
