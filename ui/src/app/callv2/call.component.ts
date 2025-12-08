@@ -5,7 +5,7 @@ import {FormsModule} from '@angular/forms';
 import {HomeComponent} from '../home/home.component';
 import {
   DataChannelService,
-  VideoChannelService,
+  VideoChannelService, VideoElementUtil,
 } from 'webrtc-common';
 import {environment} from '../../environments/environment';
 
@@ -104,79 +104,23 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
         null,
         environment.socket
       );
+      // init html control elements
+      await VideoElementUtil.initControls(
+        this.videoChannelSvc,
+        this.localVideo.nativeElement,
+        this.remoteStreams,
+        this.remoteUsers
+      ).then()
     }
-    // insert video element khi có remote stream connected
-    this.videoChannelSvc.addOnRemoteStreamListener((stream, from) => {
-      console.log(`Received new stream: ${from}`)
-      this.remoteStreams[from] = stream;
-      this.remoteVideoHtmlCallback(from, stream);
-    });
-    await this.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
-      this.localVideo.nativeElement.srcObject = stream; // add local media to html element
-    })
   }
 
 // ----------------- Điều khiển Media ----------------------------------------------------------------------
 
-  /**
-   * Render remote videos
-   * @param from caller id
-   * @param stream remote stream
-   * @private
-   */
-  private remoteVideoHtmlCallback(from: string, stream: MediaStream) {
-    let videoEl = document.getElementById('video-' + from) as HTMLVideoElement;
-    if (!videoEl) {
-      const grid = document.querySelector('.participant-grid');
-      if (grid) {
-        // Tạo div tile
-        const tileDiv = document.createElement('div');
-        tileDiv.className = 'tile';
-
-        // Tạo video element
-        videoEl = document.createElement('video');
-        videoEl.id = 'video-' + from;
-        videoEl.autoplay = true;
-        videoEl.playsInline = true;
-        videoEl.className = 'dynamic-video'; // Thêm class
-
-        // Thêm video vào tile, tile vào grid
-        tileDiv.appendChild(videoEl);
-        grid.appendChild(tileDiv);
-      }
-    }
-    videoEl.srcObject = stream;
-  }
-
-  hangUp() {
-    this.videoChannelSvc.hangUp();
-  }
-
   toggleCamera() {
-    if (!this.videoChannelSvc || !this.videoChannelSvc.getLocalStream()) this.initVideoChannel().then(_ => {
-    })
+    if (!this.videoChannelSvc) {
+      this.initVideoChannel().then()
+    }
     this.videoChannelSvc.toggleLocalVideo()
-  }
-
-  toggleMic() {
-    if (!this.videoChannelSvc || !this.videoChannelSvc.getLocalStream()) this.initVideoChannel().then(_ => {
-    })
-    this.videoChannelSvc.toggleLocalMic()
-  }
-
-  // eslint-disable-next-line @angular-eslint/no-empty-lifecycle-method
-  // noinspection JSUnusedGlobalSymbols
-  /**
-   * Re-render remote videos
-   */
-  ngAfterViewChecked(): void {
-    // Gán lại srcObject cho tất cả video remote
-    this.remoteUsers.forEach(user => {
-      const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
-      if (videoEl && this.remoteStreams[user] && videoEl.srcObject !== this.remoteStreams[user]) {
-        videoEl.srcObject = this.remoteStreams[user];
-      }
-    });
   }
 
   // ----------------- Data Channel Chat -----------------------------------------------------------------------

@@ -4,3 +4,4 @@ export * from './websocket.service';
 export * from './common/const';
 export * from './common/Base64Util';
 export * from './dto/SignalMsg';
+export * from './common/VideoElementUtil';
