@@ -330,53 +330,67 @@ func sendMsg(msg dto.Message, senderConn *websocket.Conn, broadcast bool) error 
 		return errors.New(fmt.Sprintf("JSON encoding error: %s", err))
 	}
 	if broadcast {
-		log.Println("Send broadcast from ", *msg.From)
-		// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
-		for user, conn := range connections {
-			if msg.From != nil && user != *msg.From {
-				conf.Mutex.Lock()
-				err := conn.WriteMessage(websocket.TextMessage, data)
-				conf.Mutex.Unlock()
-				if err != nil {
-					log.Printf("Failed to send message to %s: %v\n", user, err)
-				}
-			}
-		}
-		wsResponse(nil, senderConn, dto.WsResponse{
-			Status:  http.StatusOK,
-			Message: "Send broadcast msg successfully",
-		})
+		sendBroadcast(msg, senderConn, connections, conf, data)
 	} else {
-		sent := false
-		// send to exactly userID
-		for user, conn := range connections {
-			if msg.From != nil && user == *msg.To {
-				conf.Mutex.Lock()
-				err := conn.WriteMessage(websocket.TextMessage, data)
-				conf.Mutex.Unlock()
-				if err != nil {
-					log.Printf("Failed to send message to %s: %v\n", user, err)
-				} else {
-					sent = true
-				}
-				break
-			}
+		err2 := sendTo(msg, senderConn, connections, conf, data)
+		if err2 != nil {
+			return err2
 		}
-		if !sent {
-			log.Printf("Failed to send message to %s\n", *msg.To)
-			wsResponse(nil, senderConn, dto.WsResponse{
-				Status:  http.StatusInternalServerError,
-				Message: fmt.Sprintf("Failed to send message to %s", *msg.To),
-			})
-			return errors.New(fmt.Sprintf("Failed to send message to %s", *msg.To))
-		}
-		wsResponse(conf.Mutex, senderConn, dto.WsResponse{
-			Status:  http.StatusOK,
-			Message: fmt.Sprintf("Sent to %s", *msg.To),
-		})
 	}
 
 	return nil
+}
+
+func sendTo(msg dto.Message, senderConn *websocket.Conn,
+	connections map[string]*websocket.Conn, conf config.WebSocketConf, data []byte) error {
+	sent := false
+	// send to exactly userID
+	for user, conn := range connections {
+		if msg.From != nil && user == *msg.To {
+			conf.Mutex.Lock()
+			err := conn.WriteMessage(websocket.TextMessage, data)
+			conf.Mutex.Unlock()
+			if err != nil {
+				log.Printf("Failed to send message to %s: %v\n", user, err)
+			} else {
+				sent = true
+			}
+			break
+		}
+	}
+	if !sent {
+		log.Printf("Failed to send message to %s\n", *msg.To)
+		wsResponse(nil, senderConn, dto.WsResponse{
+			Status:  http.StatusInternalServerError,
+			Message: fmt.Sprintf("Failed to send message to %s", *msg.To),
+		})
+		return errors.New(fmt.Sprintf("Failed to send message to %s", *msg.To))
+	}
+	wsResponse(conf.Mutex, senderConn, dto.WsResponse{
+		Status:  http.StatusOK,
+		Message: fmt.Sprintf("Sent to %s", *msg.To),
+	})
+	return nil
+}
+
+func sendBroadcast(msg dto.Message, senderConn *websocket.Conn,
+	connections map[string]*websocket.Conn, conf config.WebSocketConf, data []byte) {
+	log.Println("Send broadcast from ", *msg.From)
+	// Gửi tin nhắn đến tất cả user trong phòng (trừ chính người gửi)
+	for user, conn := range connections {
+		if msg.From != nil && user != *msg.From {
+			conf.Mutex.Lock()
+			err := conn.WriteMessage(websocket.TextMessage, data)
+			conf.Mutex.Unlock()
+			if err != nil {
+				log.Printf("Failed to send message to %s: %v\n", user, err)
+			}
+		}
+	}
+	wsResponse(nil, senderConn, dto.WsResponse{
+		Status:  http.StatusOK,
+		Message: "Send broadcast msg successfully",
+	})
 }
 
 func wsResponse(mutex *sync.Mutex, conn *websocket.Conn, resp dto.WsResponse) {
