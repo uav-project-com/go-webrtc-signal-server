@@ -6,7 +6,7 @@
 	},
 	"item": [
 		{
-			"name": "http://localhost:8080/admin",
+			"name": "login",
 			"event": [
 				{
 					"listen": "test",
@@ -41,7 +41,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\"\r\n}"
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"canhthong\"\r\n}"
 				},
 				"url": {
 					"raw": "http://localhost:8080/login",
