@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="go-rtc-client" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="go-webrtc-signal-server" />
+    <working_directory value="$PROJECT_DIR$/ui/go-client" />
+    <envs>
+      <env name="CGO_ENABLED" value="1" />
+    </envs>
+    <kind value="FILE" />
+    <package value="github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/ui/go-client/main.go" />
+    <method v="2" />
+  </configuration>
+</component>
