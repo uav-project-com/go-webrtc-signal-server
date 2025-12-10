@@ -65,3 +65,10 @@ go mod init github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client
 # update project lib
 go mod tidy
 ```
+## 3. Infrastructure
+<style>img {background-color: white;}</style>
+![infrastructure.png](../../docs/infrastructure.png)
+
+- Pi5 project client location: `go-webrtc-signal-server/ui/go-client`
+- Remote client web UI: `go-webrtc-signal-server/ui/src`
+- Socket server (golang): `go-webrtc-signal-server/controllers)`
