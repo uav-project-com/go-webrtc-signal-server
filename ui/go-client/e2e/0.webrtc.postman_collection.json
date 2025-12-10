@@ -1,0 +1,102 @@
+{
+	"info": {
+		"_postman_id": "5d75aa34-b5b1-4a38-861d-dc7814be126d",
+		"name": "0.webrtc",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "http://localhost:8080/admin",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Kiểm tra xem response có phải JSON không\r",
+							"try {\r",
+							"    var jsonData = pm.response.json();\r",
+							"    // Kiểm tra xem trường token có tồn tại trong response hay không\r",
+							"    if (jsonData.token) {\r",
+							"        pm.environment.set(\"TOKEN\", jsonData.token);\r",
+							"        console.log(\"Token đã được lưu:\", jsonData.token);\r",
+							"    } else {\r",
+							"        console.log(\"Không tìm thấy trường token trong response\");\r",
+							"    }\r",
+							"} catch (e) {\r",
+							"    console.log(\"Lỗi khi phân tích cú pháp JSON:\", e);\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "content-type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\"\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/login",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Hello world - gin - golang",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/auth/hello",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"auth",
+						"hello"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

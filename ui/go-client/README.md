@@ -72,3 +72,7 @@ go mod tidy
 - Pi5 project client location: `go-webrtc-signal-server/ui/go-client`
 - Remote client web UI: `go-webrtc-signal-server/ui/src`
 - Socket server (golang): `go-webrtc-signal-server/controllers)`
+
+## 4. Golang client communication
+<style>img {background-color: white;}</style>
+![golang-client.png](../../docs/golang-client.png)X:\workspace\0.FPV\go-webrtc-signal-server\docs\golang-client.png
