@@ -8,6 +8,8 @@ import (
   "log"
   "time"
 
+  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
+
   jwt "github.com/appleboy/gin-jwt/v2"
   "github.com/gin-gonic/gin"
   "github.com/google/uuid"
@@ -18,6 +20,7 @@ import (
 type Login struct {
   Username string `form:"username" json:"username" binding:"required"`
   Password string `form:"password" json:"password" binding:"required"`
+  ID int64 `json:"id,omitempty"`
 }
 
 func hashSHA256(password string) string {
@@ -29,7 +32,7 @@ func hashSHA256(password string) string {
   return hex.EncodeToString(hash.Sum(nil))
 }
 
-func configRoutes(user service.Service) *gin.Engine {
+func configRoutes(service service.Service) *gin.Engine {
   r := gin.Default()
   uuidString := uuid.New().String()
   authMiddleware, err := jwt.New(&jwt.GinJWTMiddleware{
@@ -37,6 +40,13 @@ func configRoutes(user service.Service) *gin.Engine {
     Key:        []byte(uuidString + "eb43b856"),
     Timeout:    3 * time.Hour,
     MaxRefresh: 6 * time.Hour,
+    // Embed `uid` into the token payload so token contains the username under `uid`.
+    PayloadFunc: func(data interface{}) jwt.MapClaims {
+      if v, ok := data.(*Login); ok {
+        return jwt.MapClaims{"uid": v.Username, "sub": fmt.Sprintf("%d", v.ID)}
+      }
+      return jwt.MapClaims{}
+    },
     Authenticator: func(c *gin.Context) (interface{}, error) {
       var loginVals Login
       if err := c.ShouldBind(&loginVals); err != nil {
@@ -48,19 +58,21 @@ func configRoutes(user service.Service) *gin.Engine {
       hashPassword := hashSHA256(password)
 
       // Validate username/password
-      user, err := user.FindByUsername(c, userID)
+      user, err := service.FindByUsername(c.Request.Context(), userID)
       if err != nil {
         log.Printf("FindByUsername error: %v\n", err)
+        c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized", "reason": "service lookup failed"})
         return nil, jwt.ErrFailedAuthentication
       }
       if user.Username == "admin" && hashPassword == user.Password {
-        return &Login{Username: userID}, nil
+        return &Login{Username: userID, ID: user.ID}, nil
       }
+      c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized", "reason": "invalid credentials"})
       return nil, jwt.ErrFailedAuthentication
     },
     IdentityHandler: func(c *gin.Context) interface{} {
       claims := jwt.ExtractClaims(c)
-      return claims["id"]
+      return claims["uid"]
     },
   })
 
@@ -76,10 +88,26 @@ func configRoutes(user service.Service) *gin.Engine {
   auth.GET("/hello", func(c *gin.Context) {
     c.JSON(200, gin.H{"message": "Hello from protected route"})
   })
+
+  auth = r.Group("/uav")
+  auth.Use(authMiddleware.MiddlewareFunc())
+  auth.POST("/start", func(c *gin.Context) {
+    user, err := service.ExtractToken(c.GetHeader("Authorization"))
+    if err != nil {
+      c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized", "reason": "invalid credentials"})
+    }
+    webrtcSocket, e := service.InitWebSocketKeepConnection(c.Request.Context(), service, &user.Username)
+    if e != nil {
+      log.Fatal("InitWebSocketKeepConnection:", e)
+    }
+    // TODO: dummy code:
+    webrtcSocket.GetMessages()
+  })
   return r
 }
 
 var db *sql.DB
+var webrtcSocket *webrtc.WebsocketClient
 
 // InitDB sẽ khởi tạo kết nối DB một lần
 func initDB() (*sql.DB, error) {
@@ -119,7 +147,7 @@ func main() {
   defer closeDB()
   svc := service.NewService(database)
   router := configRoutes(*svc)
-  err = router.Run(":8080")
+  err = router.Run(":3001")
   if err != nil {
     return
   }

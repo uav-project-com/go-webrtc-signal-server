@@ -40,7 +40,7 @@ func NewDataChannelClient(userID, roomID string, isMaster bool, socketURL string
 	}
 
 	ws := NewWebsocketClient(socketURL)
-	if err := ws.Connect(roomID, userID); err != nil {
+  if err := ws.Connect(roomID, &userID); err != nil {
 		return nil, err
 	}
 	c.ws = ws
