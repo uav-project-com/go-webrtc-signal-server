@@ -76,3 +76,5 @@ go mod tidy
 ## 4. Golang client communication
 <style>img {background-color: white;}</style>
 ![golang-client.png](../../docs/golang-client.png)X:\workspace\0.FPV\go-webrtc-signal-server\docs\golang-client.png
+
+# Room hard code DB: 24G-ZT0-Q8T

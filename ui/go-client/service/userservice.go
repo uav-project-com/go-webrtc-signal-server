@@ -1,10 +1,9 @@
 package service
 
 import (
+  "context"
   "database/sql"
-  "fmt"
-
-  _ "github.com/mattn/go-sqlite3"
+  "errors"
 )
 
 // User represents a record in the `user` table from the SQLite database.
@@ -14,26 +13,21 @@ type User struct {
   Password string `json:"password"`
 }
 
-// FindByUsername opens the sqlite database file at dbPath (e.g. `/tmp/db.data`) and
-// returns row from the `user` table selecting columns `ID, username, password`.
-func FindByUsername(username string) (*User, error) {
-  db, err := sql.Open("sqlite3", "/mnt/x/workspace/0.FPV/go-webrtc-signal-server/ui/go-client/SQLite.db")
-  if err != nil {
-    return nil, fmt.Errorf("open sqlite db: %w", err)
-  }
-  defer func(db *sql.DB) {
-    err := db.Close()
-    if err != nil {
-      fmt.Printf("close sqlite db: %v", err)
-    }
-  }(db)
+// FindByUsername returns the user record for the given username.
+// It uses the Service's shared *sql.DB and accepts a context for cancellation.
+func (s *Service) FindByUsername(ctx context.Context, username string) (*User, error) {
+  row := s.db.QueryRowContext(ctx,
+    "SELECT id, username, password FROM user WHERE username = ?",
+    username,
+  )
 
-  row := db.QueryRow("SELECT ID, username, password FROM user where username = ?", username)
   var user User
-  // Scan vào các biến tương ứng
-  err = row.Scan(&user.ID, &user.Username, &user.Password)
-  if err != nil {
-    return nil, fmt.Errorf("row error: %w", err)
+  if err := row.Scan(&user.ID, &user.Username, &user.Password); err != nil {
+    if errors.Is(err, sql.ErrNoRows) {
+      return nil, err
+    }
+    return nil, err
   }
+
   return &user, nil
 }
