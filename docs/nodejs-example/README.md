@@ -15,9 +15,9 @@ npm i
 node server.js
 #    Sau đó truy cập:
 #    
-#    Alice: http://localhost:8080/?room=testroom
+#    Alice: http://localhost:8080/?room=e2e-room
 #    
-#    Bob: http://localhost:8080/?room=testroom (ở tab khác hoặc máy khác cùng mạng)
+#    Bob: http://localhost:8080/?room=e2e-room (ở tab khác hoặc máy khác cùng mạng)
 
 
 ```

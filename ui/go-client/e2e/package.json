@@ -1,0 +1,13 @@
+{
+  "name": "go-client-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node run-e2e.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "newman": "^6.2.0",
+    "ws": "^8.18.3"
+  }
+}
