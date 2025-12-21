@@ -56,7 +56,7 @@ export class VideoChannelService extends EventTarget {
       if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
         // auto init data-channel for chat in real life logic
         this.initVideoCall()
-      } else if (message.msg === REQUEST_JOIN_MEDIA_CHANNEL) {
+      } else if (CommonRtc.isSignalMsg(message) && message.msg === REQUEST_JOIN_MEDIA_CHANNEL) {
         if (this.isMaster === 'true') {
           if (this.confirmJoinCb) {
             this.confirmJoinCb(`${message.from} want to join this room!`, () => {
