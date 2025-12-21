@@ -1,15 +1,16 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="go-rtc-client" type="GoApplicationRunConfiguration" factoryName="Go Application">
+  <configuration default="false" name="go build github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client" type="GoApplicationRunConfiguration" factoryName="Go Application" nameIsGenerated="true">
     <module name="go-webrtc-signal-server" />
     <target name="WSL - Ubuntu-24.04" />
     <working_directory value="$PROJECT_DIR$/ui/go-client" />
+    <go_parameters value="-tags dev" />
     <envs>
       <env name="CGO_ENABLED" value="1" />
     </envs>
-    <kind value="FILE" />
+    <kind value="PACKAGE" />
     <package value="github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client" />
     <directory value="$PROJECT_DIR$" />
-    <filePath value="$PROJECT_DIR$/ui/go-client/main.go" />
+    <filePath value="$PROJECT_DIR$/ui/go-client/main_dev.go" />
     <option name="build_on_remote_target" value="true" />
     <method v="2" />
   </configuration>
