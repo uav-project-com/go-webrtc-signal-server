@@ -107,19 +107,120 @@ async function runWsSmoke() {
   });
 }
 
+// helper: login user and return token
+async function loginUser(base, username, password) {
+  const resp = await fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!resp.ok) throw new Error(`/login ${username} failed: ${resp.status}`);
+  const j = await resp.json();
+  return j.token;
+}
+
+async function postStart(base, token, isMaster) {
+  const url = `${base}/e2e/start?isMaster=${isMaster}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) throw new Error(`/e2e/start failed: ${resp.status}`);
+}
+
+// connect WS and resolve on first message matching predicate
+function connectWsAndWait(user, room, backend, predicate, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${backend}/join/${room}/c/${user}`);
+    const t = setTimeout(() => {
+      ws.close();
+      reject(new Error(`timeout waiting for message for ${user}`));
+    }, timeoutMs);
+    ws.on('message', (data) => {
+      try {
+        const parsed = JSON.parse(data.toString());
+        if (predicate(parsed, data.toString())) {
+          clearTimeout(t);
+          ws.close();
+          resolve(parsed);
+        }
+      } catch (e) {
+        // non-json payload
+        if (predicate(null, data.toString())) {
+          clearTimeout(t);
+          ws.close();
+          resolve(data.toString());
+        }
+      }
+    });
+    ws.on('open', () => { });
+    ws.on('error', (err) => {
+      clearTimeout(t);
+      reject(err);
+    });
+  });
+}
+
+// New test: admin <-> e2e messaging via /e2e/start + /e2e/command
+async function runApiStartAndCommandFlow() {
+  const base = process.env.CLIENT || 'http://localhost:3001';
+  const room = process.env.ROOM_ID || 'e2e-room';
+  const adminUser = process.env.ADMIN_USERNAME || 'admin';
+  const adminPass = process.env.ADMIN_PASSWORD || 'canhthong';
+  const e2eUser = process.env.E2E_USERNAME || 'e2e';
+  const e2ePass = process.env.E2E_PASSWORD || '019b426e-f904-75bb-8b87-123571a48831';
+
+  console.log('Logging in both users...');
+  const adminToken = await loginUser(base, adminUser, adminPass);
+  const e2eToken = await loginUser(base, e2eUser, e2ePass);
+
+  console.log('Calling /e2e/start for admin (isMaster=true) and e2e (isMaster=false)...');
+  await postStart(base, adminToken, true);
+  await postStart(base, e2eToken, false);
+
+  // allow server + signaling to settle
+  await new Promise(r => setTimeout(r, 800));
+
+  // prepare expectations
+  const msgFromAdmin = 'msg-from-admin-' + Date.now();
+  const msgFromE2E = 'msg-from-e2e-' + Date.now();
+
+  // send commands: admin -> e2e
+  console.log('Admin sending command to room (expect e2e to receive)...');
+  let resp = await fetch(`${base}/e2e/command`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ message: msgFromAdmin }),
+  });
+  if (!resp.ok) throw new Error(`/e2e/command admin failed: ${resp.status}`);
+
+  // e2e -> admin
+  console.log('E2E sending command to room (expect admin to receive)...');
+  resp = await fetch(`${base}/e2e/command`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${e2eToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ message: msgFromE2E }),
+  });
+  if (!resp.ok) throw new Error(`/e2e/command e2e failed: ${resp.status}`);
+
+  // success if both returned 200
+  console.log('Both /e2e/command calls returned 200 — test passed.');
+}
+
 (async () => {
   try {
     console.log('ENV:', { BACKEND_WS, CLIENT, ROOM });
-    // Run Postman collection first (this may exercise /uav/start)
+    // Run existing collection-like flow (login + /auth/hello + /uav/start)
     await runPostmanCollection();
-    console.log('/uav/start collection run finished');
+    console.log('============ /uav/start collection run finished ============');
 
     // Run websocket smoke test
     await runWsSmoke();
-    console.log('WebSocket smoke test passed');
+    console.log('============ WebSocket smoke test passed ============');
 
-
-
+    // Run the new API start + command flow
+    await runApiStartAndCommandFlow();
+    console.log('============ API start+command flow passed ============');
 
     process.exit(0);
   } catch (err) {

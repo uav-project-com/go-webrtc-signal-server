@@ -73,6 +73,19 @@ go mod tidy
 - Remote client web UI: `go-webrtc-signal-server/ui/src`
 - Socket server (golang): `go-webrtc-signal-server/controllers)`
 
+```cmd
+## KILL golang process in Windows
+PS C:\WINDOWS\system32> tasklist | findstr go
+winlogon.exe                  1700 Console                    1      8,496 K
+___138go_build_go_rest_ap    29664 Console                    1     18,040 K
+goland64.exe                 31932 Console                    1  2,269,036 K
+goland64.exe                  3512 Console                    1     51,504 K
+goland64.exe                 18116 Console                    1     22,184 K
+gopls.exe                     5844 Console                    1    573,040 K
+gopls.exe                    32228 Console                    1     18,308 K
+PS C:\WINDOWS\system32> taskkill /PID 29664 /F
+```
+
 ## 4. Golang client communication
 <style>img {background-color: white;}</style>
 ![golang-client.png](../../docs/golang-client.png)X:\workspace\0.FPV\go-webrtc-signal-server\docs\golang-client.png

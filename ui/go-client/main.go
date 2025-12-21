@@ -64,7 +64,7 @@ func configRoutes(service service.UserService, uavHandler api.UavAPI) *gin.Engin
         c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized", "reason": "service lookup failed"})
         return nil, jwt.ErrFailedAuthentication
       }
-      if user.Username == "admin" && hashPassword == user.Password {
+      if user.Username == userID && hashPassword == user.Password {
         return &Login{Username: userID, ID: user.ID}, nil
       }
       c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized", "reason": "invalid credentials"})
