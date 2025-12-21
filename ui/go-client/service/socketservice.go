@@ -8,7 +8,7 @@ import (
 )
 
 type SocketService interface {
-  InitWebSocketKeepConnection(ctx context.Context, username *string) (*webrtc.WebsocketClient, error)
+  InitWebSocketKeepConnection(ctx context.Context, username *string) (*Socket, error)
   InitDataChannel(channelInfo *DataChannel) (*webrtc.DataChannelClient, error)
 }
 
@@ -18,7 +18,8 @@ type socketService struct {
 }
 
 type Socket struct {
-	Uid *string
+  Config   *Config
+  WsClient *webrtc.WebsocketClient
 }
 
 type DataChannel struct {
@@ -33,7 +34,7 @@ func NewSocketService(d DatabaseProviderService, c ConfigService) SocketService 
 }
 
 // InitWebSocketKeepConnection is a placeholder method to keep the socket connection alive for UAV controller
-func (s *socketService) InitWebSocketKeepConnection(ctx context.Context, username *string) (*webrtc.WebsocketClient, error) {
+func (s *socketService) InitWebSocketKeepConnection(ctx context.Context, username *string) (*Socket, error) {
   conf, err := s.configSvc.FindLatestConfig(ctx)
 	if err != nil {
 		log.Println("FindLatestConfig:", err)
@@ -45,7 +46,7 @@ func (s *socketService) InitWebSocketKeepConnection(ctx context.Context, usernam
 		log.Println("InitWebSocketKeepConnection:", err)
 		return nil, err
 	}
-	return ws, nil
+  return &Socket{Config: conf, WsClient: ws}, nil
 }
 
 func (s *socketService) InitDataChannel(channelInfo *DataChannel) (*webrtc.DataChannelClient, error) {
@@ -55,6 +56,5 @@ func (s *socketService) InitDataChannel(channelInfo *DataChannel) (*webrtc.DataC
   if err != nil {
     return nil, err
   }
-  dataChannel.SendMsg()
   return dataChannel, nil
 }

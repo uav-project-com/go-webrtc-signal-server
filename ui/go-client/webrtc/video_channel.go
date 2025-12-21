@@ -87,7 +87,7 @@ func (c *VideoChannelClient) initVideoCall() {
 	// In TS this calls toggleLocalVideo(true) and sends REQUEST_JOIN_MEDIA_CHANNEL
 	// Here we just send the join request when not master
 	if !c.isMaster {
-		m := SignalMsg{Msg: RequestJoinMediaChannel, From: c.userID, RoomId: c.roomID, Channel: ptrChannel(ChannelWebrtc)}
+    m := SignalMsg{Msg: RequestJoinMediaChannel, From: c.userID, RoomId: c.roomID, Channel: getValue(ChannelWebrtc)}
 		_ = c.websocket.Send(m)
 	}
 }
@@ -133,7 +133,7 @@ func (c *VideoChannelClient) handleSignalingData(message *SignalMsg) {
 					_ = peer.SetLocalDescription(answer)
 					msgObj := map[string]interface{}{"type": answer.Type.String(), "sdp": peer.LocalDescription()}
 					enc, _ := json.Marshal(msgObj)
-					m := SignalMsg{Channel: ptrChannel(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(enc), From: c.userID, To: sid, RoomId: c.roomID}
+          m := SignalMsg{Channel: getValue(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(enc), From: c.userID, To: sid, RoomId: c.roomID}
 					_ = c.websocket.Send(m)
 				}
 				c.getAndClearPendingCandidates(sid)
@@ -197,7 +197,7 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 			return
 		}
 		j, _ := json.Marshal(map[string]interface{}{"type": "candidate", "sdp": ci.ToJSON()})
-		m := SignalMsg{Channel: ptrChannel(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(j), From: c.userID, To: sid, RoomId: c.roomID}
+    m := SignalMsg{Channel: getValue(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(j), From: c.userID, To: sid, RoomId: c.roomID}
 		_ = c.websocket.Send(m)
 	})
 
@@ -224,7 +224,7 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 			_ = pc.SetLocalDescription(offer)
 			obj := map[string]interface{}{"type": offer.Type.String(), "sdp": pc.LocalDescription()}
 			enc, _ := json.Marshal(obj)
-			m := SignalMsg{Channel: ptrChannel(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(enc), From: c.userID, To: sid, RoomId: c.roomID}
+      m := SignalMsg{Channel: getValue(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(enc), From: c.userID, To: sid, RoomId: c.roomID}
 			_ = c.websocket.Send(m)
 		}
 	}
@@ -279,4 +279,4 @@ func (c *VideoChannelClient) ToggleLocalMic(enable bool) {
 	// Placeholder: implement as needed by managing audio tracks
 }
 
-// ptrChannel is defined in another file (data_channel.go) in this package.
+// getValue is defined in another file (data_channel.go) in this package.
