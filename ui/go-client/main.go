@@ -94,6 +94,11 @@ func configRoutes(service service.UserService, uavHandler api.UavAPI) *gin.Engin
   auth.POST("/start", func(c *gin.Context) {
     uavHandler.StartUavControlHandler(c)
   })
+  auth = r.Group("/e2e")
+  auth.Use(authMiddleware.MiddlewareFunc())
+  auth.POST("/start", func(c *gin.Context) {
+    uavHandler.StartUavControlHandler(c)
+  })
   auth.POST("/command", func(c *gin.Context) {
     uavHandler.CommandHandler(c)
   })
