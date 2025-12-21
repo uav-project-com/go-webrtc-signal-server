@@ -40,7 +40,7 @@ export class DataChannelService extends EventTarget {
       if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
         // auto init data-channel for chat in real life logic
         this.initDataChannel()
-      } else if (message.msg === REQUEST_JOIN_DATA_CHANNEL) {
+      } else if (CommonRtc.isSignalMsg(message) && message.msg === REQUEST_JOIN_DATA_CHANNEL) {
         // (#2) A nhận được: Thông báo B1 join
         if (this.isMaster) {
           if (this.confirmJoinCb) {
@@ -86,6 +86,7 @@ export class DataChannelService extends EventTarget {
         msg: REQUEST_JOIN_DATA_CHANNEL,
         roomId: this.roomId,
         from: this.userId,
+        channel: Channel.DataRtc
       }
       this.websocketSvc.send(msg)
     }
