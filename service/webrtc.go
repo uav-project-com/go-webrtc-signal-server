@@ -158,22 +158,22 @@ func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) 
 	}
 
 	//dataChanel, err := peerConnection.CreateDataChannel("remote", &webrtc.DataChannelInit{
-	//	Ordered:           utils.AsPointer(false),       // message ordering
-	//	MaxPacketLifeTime: utils.AsPointer(uint16(100)), // keep package in 100 mini second and then discard
-	//	Negotiated:        utils.AsPointer(false),       // auto create ID for data chanel
+	//  Ordered:           utils.AsPointer(false),       // message ordering
+	//  MaxPacketLifeTime: utils.AsPointer(uint16(100)), // keep package in 100 mini second and then discard
+	//  Negotiated:        utils.AsPointer(false),       // auto create ID for data chanel
 	//})
 	//if err != nil {
-	//	log.Println("CreateDataChannel error occurred", err)
+	//  log.Println("CreateDataChannel error occurred", err)
 	//}
 	//dataChanel.OnOpen(func() {
-	//	log.Println("OnOpen")
+	//  log.Println("OnOpen")
 	//})
 	//dataChanel.OnMessage(func(msg webrtc.DataChannelMessage) {
-	//	log.Println("OnMessage", msg.Data)
-	//	err := dataChanel.SendText(string(msg.Data))
-	//	if err != nil {
-	//		log.Println("SendText error occurred", err)
-	//	}
+	//  log.Println("OnMessage", msg.Data)
+	//  err := dataChanel.SendText(string(msg.Data))
+	//  if err != nil {
+	//    log.Println("SendText error occurred", err)
+	//  }
 	//})
 
 	if !callInfo.IsSender {
@@ -246,9 +246,9 @@ func createTrack(peerConnection *webrtc.PeerConnection, pcMapLocal map[string]ch
 		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
 		// This can be less wasteful by processing incoming RTCP events, then we would emit a NACK/PLI when a viewer requests it
 		//Trong đoạn code có gợi ý rằng việc gửi PLI định kỳ có thể "lãng phí tài nguyên".
-		//	Một cách tối ưu hơn là lắng nghe các sự kiện RTCP từ người xem (viewers),
-		//	chỉ gửi PLI khi cần thiết (ví dụ, khi nhận được yêu cầu NACK hoặc PLI từ phía người xem).
-		//	Điều này giúp tiết kiệm băng thông và tài nguyên xử lý.
+		//  Một cách tối ưu hơn là lắng nghe các sự kiện RTCP từ người xem (viewers),
+		//  chỉ gửi PLI khi cần thiết (ví dụ, khi nhận được yêu cầu NACK hoặc PLI từ phía người xem).
+		//  Điều này giúp tiết kiệm băng thông và tài nguyên xử lý.
 		go func() {
 			ticker = time.NewTicker(rtcpPLIInterval)
 			for range ticker.C {

@@ -124,7 +124,7 @@ func LoadConfig(resourceDir string) {
 		log.Fatal(err)
 	}
 
-	// Create a new API with the MediaEngine
+	// Create a new Api with the MediaEngine
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(&media))
 
 	peerConnectionConfig := webrtc.Configuration{

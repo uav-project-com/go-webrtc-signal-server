@@ -1,3 +1,8 @@
 # Cấu hình Line Endings
-[*]
+root = true
+
+[*.go]
 end_of_line = lf
+indent_style = tab
+indent_size = 4
+charset = utf-8

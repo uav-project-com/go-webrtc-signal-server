@@ -78,3 +78,11 @@ go mod tidy
 ![golang-client.png](../../docs/golang-client.png)X:\workspace\0.FPV\go-webrtc-signal-server\docs\golang-client.png
 
 # Room hard code DB: 24G-ZT0-Q8T
+
+# UAV command list
+| Command                    | msg-key                              | Description                  |
+|----------------------------|:-------------------------------------|------------------------------|
+| request_join_data_channel  | 839d6af5-be15-474d-81c8-f34200007d4c | Connect data channel Webrtc. |
+| request_join_video_channel | 493aaf25-eea6-4f37-8f9f-eb4507811721 | Request video FPV.           |
+|                            |                                      |                              |
+|                            |                                      |                              |

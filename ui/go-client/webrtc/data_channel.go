@@ -3,6 +3,7 @@ package webrtc
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log"
 	"sync"
 
@@ -19,15 +20,44 @@ type DataChannelClient struct {
 
 	config pionwebrtc.Configuration
 
-	mu                sync.Mutex
-	peers             map[string]*pionwebrtc.PeerConnection
-	dataChannels      map[string]*pionwebrtc.DataChannel
-	pendingCandidates map[string][]pionwebrtc.ICECandidateInit
+	mu                 sync.Mutex
+	peers              map[string]*pionwebrtc.PeerConnection
+	dataChannels       map[string]*pionwebrtc.DataChannel
+	pendingCandidates  map[string][]pionwebrtc.ICECandidateInit
+	onMessageListeners []func(string)
 }
 
 // NewDataChannelClient creates and connects the signaling websocket and prepares handlers.
 func NewDataChannelClient(userID, roomID string, isMaster bool, socketURL string) (*DataChannelClient, error) {
-	c := &DataChannelClient{
+	c := newDataChannelClientBase(userID, roomID, isMaster)
+
+	ws := NewWebsocketClient(socketURL)
+	if err := ws.Connect(roomID, &userID); err != nil {
+		return nil, err
+	}
+	c.ws = ws
+
+	// Start listening messages
+	go c.listenSignaling()
+
+	return c, nil
+}
+
+// NewDataChannelClientWithWS creates a DataChannelClient using an existing WebsocketClient.
+// The provided WebsocketClient is expected to be already connected and ready to send/receive messages.
+func NewDataChannelClientWithWS(userID, roomID string, isMaster bool, ws *WebsocketClient) (*DataChannelClient, error) {
+	if ws == nil {
+		return nil, errors.New("ws cannot be nil")
+	}
+	c := newDataChannelClientBase(userID, roomID, isMaster)
+	c.ws = ws
+	go c.listenSignaling()
+	return c, nil
+}
+
+// newDataChannelClientBase creates the common DataChannelClient struct fields.
+func newDataChannelClientBase(userID, roomID string, isMaster bool) *DataChannelClient {
+	return &DataChannelClient{
 		userID:   userID,
 		roomID:   roomID,
 		isMaster: isMaster,
@@ -38,17 +68,6 @@ func NewDataChannelClient(userID, roomID string, isMaster bool, socketURL string
 		dataChannels:      make(map[string]*pionwebrtc.DataChannel),
 		pendingCandidates: make(map[string][]pionwebrtc.ICECandidateInit),
 	}
-
-	ws := NewWebsocketClient(socketURL)
-  if err := ws.Connect(roomID, &userID); err != nil {
-		return nil, err
-	}
-	c.ws = ws
-
-	// Start listening messages
-	go c.listenSignaling()
-
-	return c, nil
 }
 
 // listenSignaling consumes messages from websocket and dispatches handlers.
@@ -204,8 +223,9 @@ func (c *DataChannelClient) createDataChannelConnection(sid string, isCaller boo
 
 	pc.OnDataChannel(func(d *pionwebrtc.DataChannel) {
 		d.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
-			log.Printf("Received message from %s: %s", sid, string(msg.Data))
-			// Could dispatch to listeners via channels or callbacks
+			text := string(msg.Data)
+			log.Printf("Received message from %s: %s", sid, text)
+			c.dispatchOnMessage(text)
 		})
 		d.OnOpen(func() { log.Printf("DataChannel Open for %s", sid) })
 		c.dataChannels[sid] = d
@@ -215,7 +235,9 @@ func (c *DataChannelClient) createDataChannelConnection(sid string, isCaller boo
 		dc, err := pc.CreateDataChannel("chat", nil)
 		if err == nil {
 			dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
-				log.Printf("Received message from %s: %s", sid, string(msg.Data))
+				text := string(msg.Data)
+				log.Printf("Received message from %s: %s", sid, text)
+				c.dispatchOnMessage(text)
 			})
 			c.dataChannels[sid] = dc
 		}
@@ -239,6 +261,27 @@ func (c *DataChannelClient) createDataChannelConnection(sid string, isCaller boo
 	return nil
 }
 
+// AddOnMessageEventListener registers a callback invoked when a datachannel message arrives.
+// The callback will be called with the message text. The callback is invoked asynchronously.
+func (c *DataChannelClient) AddOnMessageEventListener(cb func(message string)) {
+	if cb == nil {
+		return
+	}
+	c.mu.Lock()
+	c.onMessageListeners = append(c.onMessageListeners, cb)
+	c.mu.Unlock()
+}
+
+func (c *DataChannelClient) dispatchOnMessage(message string) {
+	c.mu.Lock()
+	listeners := append([]func(string){}, c.onMessageListeners...)
+	c.mu.Unlock()
+	for _, cb := range listeners {
+		log.Printf("dispatching message to listener: %s", message)
+		go cb(message)
+	}
+}
+
 // SendMsg broadcasts text message to all open data channels
 func (c *DataChannelClient) SendMsg(message string) {
 	for sid, ch := range c.dataChannels {
@@ -250,7 +293,7 @@ func (c *DataChannelClient) SendMsg(message string) {
 	}
 }
 
-// Close cleans up resources
+// Close cleans up api
 func (c *DataChannelClient) Close() {
 	c.ws.Close()
 	for _, pc := range c.peers {

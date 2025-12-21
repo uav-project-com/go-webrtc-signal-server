@@ -231,7 +231,7 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 	return nil
 }
 
-// Public API ------------------------------------------------
+// Public Api ------------------------------------------------
 
 // Close tears down connections and websocket
 func (c *VideoChannelClient) Close() {
@@ -262,7 +262,7 @@ func (c *VideoChannelClient) AddOnRemoteStreamListener(listener func([]*pionwebr
 	c.remoteListeners = append(c.remoteListeners, listener)
 }
 
-// AddOnLocalStream mirrors the TS API but in Go it's a hint: callers should set local tracks via SetLocalTrack.
+// AddOnLocalStream mirrors the TS Api but in Go it's a hint: callers should set local tracks via SetLocalTrack.
 // The provided callback is invoked immediately to let callers create local tracks if they can.
 func (c *VideoChannelClient) AddOnLocalStream(cb func()) {
 	go func() {

@@ -3,10 +3,7 @@ import {ActivatedRoute} from '@angular/router';
 import {NgClass, NgForOf, NgIf} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {HomeComponent} from '../home/home.component';
-import {
-  DataChannelService,
-  VideoChannelService, VideoElementUtil,
-} from 'webrtc-common';
+import {DataChannelService, VideoChannelService, VideoElementUtil,} from 'webrtc-common';
 import {environment} from '../../environments/environment';
 
 @Component({
@@ -74,7 +71,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
   }
 
 // ================================== WebRTC & Signaling ===============================================================
-  private initDataChannel() {
+  private initDataChannel() { // Converted
     if (this.dataChannelSvc == null) {
       // isMaster = true:  (#0) A tạo room ID=1234 và chờ người khác join
       // isMaster = false: (#1) B Yêu cầu join room 1234

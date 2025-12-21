@@ -6,6 +6,15 @@ import (
 	"errors"
 )
 
+type ConfigService interface {
+  DatabaseProviderService
+  FindLatestConfig(ctx context.Context) (*Config, error)
+}
+
+type configService struct {
+  DatabaseProviderService
+}
+
 // Config represents a record in the `user` table from the SQLite database.
 type Config struct {
 	ID   int64  `json:"id"`
@@ -14,8 +23,8 @@ type Config struct {
 }
 
 // FindLatestConfig returns the latest config for connecting to the WebSocket server.
-func (s *Service) FindLatestConfig(ctx context.Context) (*Config, error) {
-	row := s.db.QueryRowContext(ctx,
+func (s *configService) FindLatestConfig(ctx context.Context) (*Config, error) {
+  row := s.Connection().QueryRowContext(ctx,
 		"SELECT id, room, ws_url FROM config ORDER BY id DESC LIMIT 1",
 	)
 
@@ -28,4 +37,8 @@ func (s *Service) FindLatestConfig(ctx context.Context) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+func NewConfigService(dbService DatabaseProviderService) ConfigService {
+  return &configService{dbService}
 }

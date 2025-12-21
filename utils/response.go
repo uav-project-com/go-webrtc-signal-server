@@ -5,5 +5,5 @@ import (
 )
 
 func RespondJSON(c *gin.Context, status int, payload interface{}) {
-    c.JSON(status, payload)
+	c.JSON(status, payload)
 }

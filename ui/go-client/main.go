@@ -5,6 +5,7 @@ import (
   "database/sql"
   "encoding/hex"
   "fmt"
+  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/api"
   "log"
   "time"
 
@@ -14,6 +15,7 @@ import (
   "github.com/gin-gonic/gin"
   "github.com/google/uuid"
   _ "github.com/mattn/go-sqlite3"
+  _ "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/api"
   "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
 )
 
@@ -32,7 +34,7 @@ func hashSHA256(password string) string {
   return hex.EncodeToString(hash.Sum(nil))
 }
 
-func configRoutes(service service.Service) *gin.Engine {
+func configRoutes(service service.UserService, uavHandler api.UavAPI) *gin.Engine {
   r := gin.Default()
   uuidString := uuid.New().String()
   authMiddleware, err := jwt.New(&jwt.GinJWTMiddleware{
@@ -92,16 +94,7 @@ func configRoutes(service service.Service) *gin.Engine {
   auth = r.Group("/uav")
   auth.Use(authMiddleware.MiddlewareFunc())
   auth.POST("/start", func(c *gin.Context) {
-    user, err := service.ExtractToken(c.GetHeader("Authorization"))
-    if err != nil {
-      c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized", "reason": "invalid credentials"})
-    }
-    webrtcSocket, e := service.InitWebSocketKeepConnection(c.Request.Context(), service, &user.Username)
-    if e != nil {
-      log.Fatal("InitWebSocketKeepConnection:", e)
-    }
-    // TODO: dummy code:
-    webrtcSocket.GetMessages()
+    uavHandler.StartUavControlHandler(c)
   })
   return r
 }
@@ -145,8 +138,14 @@ func main() {
     log.Fatalf("Failed to initialize DB: %v", err)
   }
   defer closeDB()
-  svc := service.NewService(database)
-  router := configRoutes(*svc)
+  // initialize services
+  dbService := service.NewDatabaseProviderService(database)
+  userService := service.NewUserService(dbService)
+  configService := service.NewConfigService(dbService)
+  socketService := service.NewSocketService(dbService, configService)
+  startHandler := api.NewUavAPI(userService, socketService, userService)
+
+  router := configRoutes(userService, startHandler)
   err = router.Run(":3001")
   if err != nil {
     return

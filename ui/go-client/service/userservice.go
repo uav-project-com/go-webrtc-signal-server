@@ -10,22 +10,37 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
-// User represents a record in the `user` table from the SQLite database.
-type User struct {
+type UserService interface {
+  DatabaseProviderService
+  FindByUsername(ctx context.Context, username string) (*UserInfo, error)
+  ExtractToken(tokenRaw string) (*UserInfo, error)
+}
+
+type userService struct {
+  DatabaseProviderService
+}
+
+func NewUserService(svc DatabaseProviderService) UserService {
+  return &userService{DatabaseProviderService: svc}
+}
+
+// UserInfo represents a record in the `user` table from the SQLite database.
+type UserInfo struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
 // FindByUsername returns the user record for the given username.
-// It uses the Service's shared *sql.DB and accepts a context for cancellation.
-func (s *Service) FindByUsername(ctx context.Context, username string) (*User, error) {
-	row := s.db.QueryRowContext(ctx,
+// It uses the DatabaseProviderService's shared *sql.DB and accepts a context for cancellation.
+func (s *userService) FindByUsername(ctx context.Context, username string) (*UserInfo, error) {
+  db := s.Connection()
+  row := db.QueryRowContext(ctx,
 		"SELECT id, username, password FROM user WHERE username = ?",
 		username,
 	)
 
-	var user User
+  var user UserInfo
 	if err := row.Scan(&user.ID, &user.Username, &user.Password); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -36,7 +51,7 @@ func (s *Service) FindByUsername(ctx context.Context, username string) (*User, e
 	return &user, nil
 }
 
-func (s *Service) ExtractToken(tokenRaw string) (*User, error) {
+func (s *userService) ExtractToken(tokenRaw string) (*UserInfo, error) {
 	// Parse token without verifying signature because signing key is held by the HTTP server.
 	// We only extract claims (`sub` or `uid`) and then load the authoritative user record from DB.
 	token := strings.Split(tokenRaw, "Bearer ")[1]
@@ -67,7 +82,7 @@ func (s *Service) ExtractToken(tokenRaw string) (*User, error) {
 			if !ok {
 				return nil, errors.New("invalid sub claim type")
 			}
-			var user = User{
+      var user = UserInfo{
 				ID:       id,
 				Username: username,
 			}
