@@ -1,15 +1,17 @@
 package api
 
 import (
-	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
 	"log"
 
-	"github.com/gin-gonic/gin"
+  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
+
+  "github.com/gin-gonic/gin"
 	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
 )
 
 type UavAPI interface {
 	StartUavControlHandler(ctx *gin.Context)
+  CommandHandler(ctx *gin.Context)
 }
 
 type uavAPI struct {
@@ -17,6 +19,7 @@ type uavAPI struct {
 	databaseSvc service.DatabaseProviderService
 	socketSvc   service.SocketService
 	userSvc     service.UserService
+  dataChannel *webrtc.DataChannelClient
 }
 
 func NewUavAPI(dps service.DatabaseProviderService, ss service.SocketService, us service.UserService) UavAPI {
@@ -45,7 +48,26 @@ func (a *uavAPI) StartUavControlHandler(ctx *gin.Context) {
 	if err != nil {
 		log.Fatal("InitDataChannel:", err)
 	}
+  // keep reference for command handler
+  a.dataChannel = dataChannel
   dataChannel.AddOnMessageEventListener(func(message string) {
     log.Printf("Received message from Sender: %s\n", message)
   })
+}
+
+// CommandHandler receives a JSON body {"message": "..."} and sends it over the data channel.
+func (a *uavAPI) CommandHandler(ctx *gin.Context) {
+  var req struct {
+    Message string `json:"message"`
+  }
+  if err := ctx.ShouldBindJSON(&req); err != nil {
+    ctx.JSON(400, gin.H{"error": "invalid request", "reason": err.Error()})
+    return
+  }
+  if a.dataChannel == nil {
+    ctx.JSON(500, gin.H{"error": "datachannel not initialized"})
+    return
+  }
+  a.dataChannel.SendMsg(req.Message)
+  ctx.JSON(200, gin.H{"status": "sent"})
 }

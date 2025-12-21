@@ -9,8 +9,6 @@ import (
   "log"
   "time"
 
-  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
-
   jwt "github.com/appleboy/gin-jwt/v2"
   "github.com/gin-gonic/gin"
   "github.com/google/uuid"
@@ -96,11 +94,13 @@ func configRoutes(service service.UserService, uavHandler api.UavAPI) *gin.Engin
   auth.POST("/start", func(c *gin.Context) {
     uavHandler.StartUavControlHandler(c)
   })
+  auth.POST("/command", func(c *gin.Context) {
+    uavHandler.CommandHandler(c)
+  })
   return r
 }
 
 var db *sql.DB
-var webrtcSocket *webrtc.WebsocketClient
 
 // InitDB sẽ khởi tạo kết nối DB một lần
 func initDB() (*sql.DB, error) {
