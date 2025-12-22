@@ -1,18 +1,13 @@
+// Package api Common uavAPI implementation (struct and shared methods)
 package api
 
 import (
 	"log"
 
-	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
-
 	"github.com/gin-gonic/gin"
 	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
+  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
 )
-
-type UavAPI interface {
-	StartUavControlHandler(ctx *gin.Context)
-	CommandHandler(ctx *gin.Context)
-}
 
 type uavAPI struct {
 	Api
@@ -58,21 +53,4 @@ func (a *uavAPI) StartUavControlHandler(ctx *gin.Context) {
 	dataChannel.AddOnMessageEventListener(func(message string) {
 		log.Printf("Received message from Sender: %s\n", message)
 	})
-}
-
-// CommandHandler receives a JSON body {"message": "..."} and sends it over the data channel.
-func (a *uavAPI) CommandHandler(ctx *gin.Context) {
-	var req struct {
-		Message string `json:"message"`
-	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(400, gin.H{"error": "invalid request", "reason": err.Error()})
-		return
-	}
-	if a.dataChannel == nil {
-		ctx.JSON(500, gin.H{"error": "datachannel not initialized"})
-		return
-	}
-	a.dataChannel.SendMsg(req.Message)
-	ctx.JSON(200, gin.H{"status": "sent"})
 }
