@@ -60,6 +60,22 @@ go-rest-api
        ```sh
        docker run -d --name postgres-db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=password -e POSTGRES_DB=h_engine -p 5432:5432 -d postgres
        ```
+     - for WSL connect to localhost:5432 in Windows:
+        - add inbound rule in Windows Defender Firewall to allow port 5432
+        - Run command for know ip windows to connect: `ip route show | grep default`
+        - Connect it, for example: `default via 172.29.96.1 dev eth0 proto kernel` => `172.29.96.1:5432`
+        - When error, update permission:
+```bash
+# show config file
+SHOW config_file
+# "D:/database/postgres17/postgresql.conf"
+# Thêm dòng sau:
+host    all             all             172.29.0.0/16           scram-sha-256
+# Restart postgres
+# test again:
+psql -h 172.29.96.1 -U postgres -d postgres
+
+```
 
      - Update the `.env` file with your PostgreSQL credentials:
 

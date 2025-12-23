@@ -2,19 +2,42 @@
 package api
 
 import (
-	"log"
-
 	"github.com/gin-gonic/gin"
 	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
   "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
+  "log"
 )
 
 type uavAPI struct {
 	Api
-	databaseSvc service.DatabaseProviderService
-	socketSvc   service.SocketService
-	userSvc     service.UserService
-	dataChannel *webrtc.DataChannelClient
+  databaseSvc  service.DatabaseProviderService
+  socketSvc    service.SocketService
+  userSvc      service.UserService
+  dataChannel  *webrtc.DataChannelClient
+  videoChannel *webrtc.VideoChannelClient
+  videoEnabled bool
+  audioEnabled bool
+  channelInfo  *service.ChannelInfo
+}
+
+func (a *uavAPI) UavCommandHandler(cmd string) error {
+  log.Printf("Processing command: %s", cmd)
+  if cmd == CmdVideoToggle { // start or stop video stream
+    a.videoEnabled = !a.videoEnabled
+    if a.videoEnabled {
+      if a.videoChannel == nil {
+        var err error
+        a.videoChannel, err = a.socketSvc.InitVideoChannel(a.channelInfo)
+        if err != nil {
+          return err
+        }
+      }
+    }
+    if a.videoChannel != nil {
+      a.videoChannel.ToggleLocalVideo(a.videoEnabled)
+    }
+  }
+  return nil
 }
 
 func NewUavAPI(dps service.DatabaseProviderService, ss service.SocketService, us service.UserService) UavAPI {
@@ -38,19 +61,25 @@ func (a *uavAPI) StartUavControlHandler(ctx *gin.Context) {
 		log.Printf("E2E test, master is %s", master)
 		isMaster = master == "true"
 	}
-	channelInfo := &service.DataChannel{
+  channelInfo := &service.ChannelInfo{
 		Sid:      &user.Username,
 		RoomId:   &webSocket.Config.Room,
 		IsMaster: &isMaster,
 		WsClient: webSocket.WsClient,
 	}
+  a.channelInfo = channelInfo
 	dataChannel, err := a.socketSvc.InitDataChannel(channelInfo)
 	if err != nil {
 		log.Fatal("InitDataChannel:", err)
 	}
 	// keep reference for command handler
 	a.dataChannel = dataChannel
+  log.Println("Registering OnMessage listener")
 	dataChannel.AddOnMessageEventListener(func(message string) {
-		log.Printf("Received message from Sender: %s\n", message)
+    log.Printf("Callback triggered with message: %s", message)
+    err := a.UavCommandHandler(message)
+    if err != nil {
+      log.Println("UavCommandHandler:", err)
+    }
 	})
 }

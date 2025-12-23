@@ -85,7 +85,7 @@ func (c *DataChannelClient) listenSignaling() {
     log.Printf("received ws: %+v", msg)
     // Auto init data channel on received echo `onConnected` from websocket server:
     if msg.Status == 200 {
-      if s, ok := msg.Msg.(string); ok && len(s) >= 11 && s[:11] == "onConnected" {
+      if s, ok := msg.Msg.(string); ok && len(s) >= 11 && s[:11] == WebsocketConnected {
         c.initDataChannel()
         continue
       }
@@ -281,13 +281,18 @@ func (c *DataChannelClient) AddOnMessageEventListener(cb func(message string)) {
   }
   c.mu.Lock()
   c.onMessageListeners = append(c.onMessageListeners, cb)
+  count := len(c.onMessageListeners)
   c.mu.Unlock()
+  log.Printf("Added OnMessage listener. Total listeners: %d", count)
 }
-
 func (c *DataChannelClient) dispatchOnMessage(message string) {
   c.mu.Lock()
   listeners := append([]func(string){}, c.onMessageListeners...)
   c.mu.Unlock()
+  log.Printf("Dispatching message '%s' to %d listeners", message, len(listeners))
+  if len(listeners) == 0 {
+    log.Printf("WARNING: No listeners registered for message: %s", message)
+  }
   for _, cb := range listeners {
     log.Printf("dispatching message to listener: %s", message)
     go cb(message)

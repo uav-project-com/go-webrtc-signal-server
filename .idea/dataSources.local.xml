@@ -8,7 +8,11 @@
       <case-sensitivity plain-identifiers="lower" quoted-identifiers="exact" />
       <secret-storage>master_key</secret-storage>
       <user-name>postgres</user-name>
-      <schema-mapping />
+      <schema-mapping>
+        <introspection-scope>
+          <node kind="database" qname="h_engine" />
+        </introspection-scope>
+      </schema-mapping>
     </data-source>
     <data-source name="SQLite.db" uuid="abf05980-ce3b-464a-ae12-7ffeb9148725">
       <database-info product="SQLite" version="3.45.1" jdbc-version="4.2" driver-name="SQLite JDBC" driver-version="3.45.1.0" dbms="SQLITE" exact-version="3.45.1" exact-driver-version="3.45">

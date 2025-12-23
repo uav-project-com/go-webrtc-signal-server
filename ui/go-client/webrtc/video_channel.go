@@ -59,6 +59,30 @@ func NewVideoChannelClient(userID, roomName string, isMaster bool, socketURL str
 	return c, nil
 }
 
+// NewVideoChannelClientWithWs constructs the client using an existing websocket client.
+func NewVideoChannelClientWithWs(userID, roomName string, isMaster bool, ws *WebsocketClient, signalServers ...pionwebrtc.ICEServer) (*VideoChannelClient, error) {
+  cfg := pionwebrtc.Configuration{}
+  if len(signalServers) > 0 {
+    cfg.ICEServers = signalServers
+  } else {
+    cfg.ICEServers = []pionwebrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}
+  }
+
+  c := &VideoChannelClient{
+    userID:            userID,
+    roomID:            roomName,
+    isMaster:          isMaster,
+    config:            cfg,
+    peers:             make(map[string]*pionwebrtc.PeerConnection),
+    streams:           make(map[string][]*pionwebrtc.TrackRemote),
+    pendingCandidates: make(map[string][]pionwebrtc.ICECandidateInit),
+    websocket:         ws,
+  }
+
+  go c.listenSignaling()
+  return c, nil
+}
+
 func (c *VideoChannelClient) listenSignaling() {
 	msgs := c.websocket.GetMessages()
 	for raw := range msgs {
@@ -72,7 +96,7 @@ func (c *VideoChannelClient) listenSignaling() {
 		}
 		log.Printf("video ws: %+v", msg)
 		if msg.Status == 200 {
-			if s, ok := msg.Msg.(string); ok && len(s) >= 11 && s[:11] == "onConnected" {
+      if s, ok := msg.Msg.(string); ok && len(s) >= 11 && s[:11] == WebsocketConnected {
 				c.initVideoCall()
 				continue
 			}

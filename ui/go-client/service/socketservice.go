@@ -9,7 +9,8 @@ import (
 
 type SocketService interface {
   InitWebSocketKeepConnection(ctx context.Context, username *string) (*Socket, error)
-  InitDataChannel(channelInfo *DataChannel) (*webrtc.DataChannelClient, error)
+  InitDataChannel(channelInfo *ChannelInfo) (*webrtc.DataChannelClient, error)
+  InitVideoChannel(channelInfo *ChannelInfo) (*webrtc.VideoChannelClient, error)
 }
 
 type socketService struct {
@@ -22,7 +23,7 @@ type Socket struct {
   WsClient *webrtc.WebsocketClient
 }
 
-type DataChannel struct {
+type ChannelInfo struct {
   Sid      *string
   RoomId   *string
   IsMaster *bool
@@ -49,7 +50,7 @@ func (s *socketService) InitWebSocketKeepConnection(ctx context.Context, usernam
   return &Socket{Config: conf, WsClient: ws}, nil
 }
 
-func (s *socketService) InitDataChannel(channelInfo *DataChannel) (*webrtc.DataChannelClient, error) {
+func (s *socketService) InitDataChannel(channelInfo *ChannelInfo) (*webrtc.DataChannelClient, error) {
   var dataChannel *webrtc.DataChannelClient
   var err error
   dataChannel, err = webrtc.NewDataChannelClientWithWS(*channelInfo.Sid, *channelInfo.RoomId, *channelInfo.IsMaster, channelInfo.WsClient)
@@ -57,4 +58,14 @@ func (s *socketService) InitDataChannel(channelInfo *DataChannel) (*webrtc.DataC
     return nil, err
   }
   return dataChannel, nil
+}
+
+func (s *socketService) InitVideoChannel(channelInfo *ChannelInfo) (*webrtc.VideoChannelClient, error) {
+  var videoChannel *webrtc.VideoChannelClient
+  var err error
+  videoChannel, err = webrtc.NewVideoChannelClientWithWs(*channelInfo.Sid, *channelInfo.RoomId, *channelInfo.IsMaster, channelInfo.WsClient)
+  if err != nil {
+    return nil, err
+  }
+  return videoChannel, nil
 }

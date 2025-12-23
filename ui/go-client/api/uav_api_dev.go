@@ -7,6 +7,7 @@ import "github.com/gin-gonic/gin"
 type UavAPI interface {
 	StartUavControlHandler(ctx *gin.Context)
 	CommandHandler(ctx *gin.Context)
+  UavCommandHandler(cmd string) error
 }
 
 // CommandHandler receives a JSON body {"message": "..."} and sends it over the data channel.
