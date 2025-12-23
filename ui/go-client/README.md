@@ -99,3 +99,36 @@ PS C:\WINDOWS\system32> taskkill /PID 29664 /F
 | request_join_video_channel | 493aaf25-eea6-4f37-8f9f-eb4507811721 | Request video FPV.           |
 |                            |                                      |                              |
 |                            |                                      |                              |
+
+## Cancel video example
+
+`cancel` is the `context.CancelFunc` returned by `context.WithCancel`. Calling it signals the context's `Done()` channel, which causes the two goroutines in `setupTrackHandlers` (PLI ticker and RTP reader) to exit cleanly. The function is also called automatically inside `setupTrackHandlers` when the PeerConnection state becomes closed/failed/disconnected.
+
+Brief example showing how to store and call `cancel` when removing/closing a peer:
+
+Explanation: adds a `trackCancels` map to store cancels per-peer, appends the cancel returned by `setupTrackHandlers`, and calls them on `Close` to stop goroutines immediately.
+
+```go
+package webrtc
+
+// Add field to VideoChannelClient:
+// trackCancels map[string][]context.CancelFunc
+
+// When handling OnTrack:
+cancel := setupTrackHandlers(pc, track)
+c.mu.Lock()
+c.trackCancels[sid] = append(c.trackCancels[sid], cancel)
+c.mu.Unlock()
+
+// In Close (or when removing a peer):
+c.mu.Lock()
+for _, cancels := range c.trackCancels {
+    for _, fn := range cancels {
+        fn() // stop goroutines for that track
+    }
+}
+c.mu.Unlock()
+for _, pc := range c.peers {
+    _ = pc.Close()
+}
+```

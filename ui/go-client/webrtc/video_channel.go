@@ -1,11 +1,14 @@
 package webrtc
 
 import (
+  "context"
 	"encoding/base64"
 	"encoding/json"
 	"log"
 	"sync"
+  "time"
 
+  "github.com/pion/rtcp"
 	pionwebrtc "github.com/pion/webrtc/v4"
 )
 
@@ -102,7 +105,11 @@ func (c *VideoChannelClient) listenSignaling() {
 			}
 		}
 		if msg.Channel != nil && *msg.Channel == ChannelWebrtc {
-			c.handleSignalingData(&msg)
+      if msg.Msg == RequestJoinMediaChannel {
+        _ = c.createVideoPeerConnection(msg.From, c.isMaster)
+      } else {
+        c.handleSignalingData(&msg)
+      }
 		}
 	}
 }
@@ -170,6 +177,7 @@ func (c *VideoChannelClient) handleSignalingData(message *SignalMsg) {
 			_ = json.Unmarshal(sdpBytes, &desc)
 			if peer := c.peers[sid]; peer != nil {
 				_ = peer.SetRemoteDescription(desc)
+        c.getAndClearPendingCandidates(sid)
 			}
 		}
 	case "candidate":
@@ -229,7 +237,11 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 		c.mu.Lock()
 		c.streams[sid] = append(c.streams[sid], track)
 		c.mu.Unlock()
-		// notify listeners
+
+    cancel := setupTrackHandlers(pc, track)
+    _ = cancel // store if you need to cancel later
+
+    // notify listeners
 		for _, l := range c.remoteListeners {
 			l(c.streams[sid], sid)
 		}
@@ -304,3 +316,53 @@ func (c *VideoChannelClient) ToggleLocalMic(enable bool) {
 }
 
 // getValue is defined in another file (data_channel.go) in this package.
+
+func setupTrackHandlers(pc *pionwebrtc.PeerConnection, track *pionwebrtc.TrackRemote) context.CancelFunc {
+  ctx, cancel := context.WithCancel(context.Background())
+
+  // Dừng khi PeerConnection chuyển sang trạng thái kết thúc
+  pc.OnConnectionStateChange(func(state pionwebrtc.PeerConnectionState) {
+    if state == pionwebrtc.PeerConnectionStateClosed ||
+      state == pionwebrtc.PeerConnectionStateFailed ||
+      state == pionwebrtc.PeerConnectionStateDisconnected {
+      cancel()
+    }
+  })
+
+  // khởi tạo và chạy ngay lập tức một Goroutine (luồng nhẹ - lightweight thread) ẩn danh.
+  // PLI ticker: yêu cầu keyframe định kỳ
+  go func() {
+    ticker := time.NewTicker(PictureLossIndication)
+    defer ticker.Stop()
+    for {
+      select {
+      case <-ctx.Done():
+        return
+      case <-ticker.C:
+        err := pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
+        if err != nil {
+          log.Println("WriteRTCP(PLI) error:", err)
+        }
+      }
+    }
+  }()
+
+  // Đọc RTP để không cho buffer đầy
+  go func() {
+    buf := make([]byte, MaximumTransmissionUnit)
+    for {
+      select {
+      case <-ctx.Done():
+        return
+      default:
+        _, _, err := track.Read(buf)
+        if err != nil {
+          // track closed or read error -> stop
+          return
+        }
+      }
+    }
+  }()
+
+  return cancel
+}

@@ -157,25 +157,6 @@ func (v *videoCallService) CallBroadcast(c *gin.Context, callInfo dto.PeerInfo) 
 		log.Println("NewPeerConnection error occurred", err)
 	}
 
-	//dataChanel, err := peerConnection.CreateDataChannel("remote", &webrtc.DataChannelInit{
-	//  Ordered:           utils.AsPointer(false),       // message ordering
-	//  MaxPacketLifeTime: utils.AsPointer(uint16(100)), // keep package in 100 mini second and then discard
-	//  Negotiated:        utils.AsPointer(false),       // auto create ID for data chanel
-	//})
-	//if err != nil {
-	//  log.Println("CreateDataChannel error occurred", err)
-	//}
-	//dataChanel.OnOpen(func() {
-	//  log.Println("OnOpen")
-	//})
-	//dataChanel.OnMessage(func(msg webrtc.DataChannelMessage) {
-	//  log.Println("OnMessage", msg.Data)
-	//  err := dataChanel.SendText(string(msg.Data))
-	//  if err != nil {
-	//    log.Println("SendText error occurred", err)
-	//  }
-	//})
-
 	if !callInfo.IsSender {
 		err = receiveTrack(peerConnection, config.AppConfig.PeerConnectionMap, callInfo.PeerId)
 	} else {
