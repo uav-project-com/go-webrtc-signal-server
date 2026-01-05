@@ -2,8 +2,9 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
+  "encoding/json"
+  "github.com/gin-gonic/gin"
+  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
   "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
   "log"
 )
@@ -21,23 +22,62 @@ type uavAPI struct {
 }
 
 func (a *uavAPI) UavCommandHandler(cmd string) error {
-  log.Printf("Processing command: %s", cmd)
-  if cmd == CmdVideoToggle { // start or stop video stream
-    a.videoEnabled = !a.videoEnabled
-    if a.videoEnabled {
-      if a.videoChannel == nil {
-        var err error
-        a.videoChannel, err = a.socketSvc.InitVideoChannel(a.channelInfo)
-        if err != nil {
-          return err
-        }
-      }
-    }
-    if a.videoChannel != nil {
-      a.videoChannel.ToggleLocalVideo(a.videoEnabled)
-    }
-  }
-  return nil
+	// 1. Try to parse as JSON SignalMsg (from Angular DataChannel signaling)
+	var msg webrtc.SignalMsg
+	if err := json.Unmarshal([]byte(cmd), &msg); err == nil {
+		// Is this a video signaling message?
+		isVideoSignal := (msg.Msg == webrtc.RequestJoinMediaChannel) ||
+			(msg.Channel != nil && *msg.Channel == webrtc.ChannelWebrtc)
+
+		if isVideoSignal {
+			log.Println("Received Video Signaling via DataChannel. Forwarding to VideoChannelClient...")
+
+			// Ensure VideoChannel is initialized
+			if a.videoChannel == nil {
+				log.Println("Initializing VideoChannelClient on demand...")
+				var errInit error
+				a.videoChannel, errInit = a.socketSvc.InitVideoChannel(a.channelInfo)
+				if errInit != nil {
+					return errInit
+				}
+			}
+
+			// Forward the message to VideoChannelClient
+			a.videoChannel.HandleSignalMsg(msg)
+
+			// Special case: If it's a join request, we might want to auto-start sending video?
+			// The original logic toggled video on CmdVideoToggle.
+			// Angular sends RequestJoinMediaChannel when user clicks "Camera".
+			// So we should probably enable our video sending too.
+			if msg.Msg == webrtc.RequestJoinMediaChannel {
+				if !a.videoEnabled {
+					log.Println("Auto-enabling local video stream due to Join Request.")
+					a.videoEnabled = true
+					a.videoChannel.ToggleLocalVideo(true)
+				}
+			}
+			return nil
+		}
+	}
+
+	// 2. Handle legacy/plain text commands
+	log.Printf("Processing plain command: %s", cmd)
+	if cmd == CmdVideoToggle { // start or stop video stream
+		a.videoEnabled = !a.videoEnabled
+		if a.videoEnabled {
+			if a.videoChannel == nil {
+				var err error
+				a.videoChannel, err = a.socketSvc.InitVideoChannel(a.channelInfo)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if a.videoChannel != nil {
+			a.videoChannel.ToggleLocalVideo(a.videoEnabled)
+		}
+	}
+	return nil
 }
 
 func NewUavAPI(dps service.DatabaseProviderService, ss service.SocketService, us service.UserService) UavAPI {

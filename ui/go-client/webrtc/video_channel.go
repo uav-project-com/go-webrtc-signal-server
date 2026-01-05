@@ -4,12 +4,15 @@ import (
   "context"
 	"encoding/base64"
 	"encoding/json"
+  "io"
 	"log"
+  "os"
 	"sync"
   "time"
 
   "github.com/pion/rtcp"
 	pionwebrtc "github.com/pion/webrtc/v4"
+  "github.com/pion/webrtc/v4/pkg/media"
 )
 
 // VideoChannelClient is a Go port of the TypeScript VideoChannelService.
@@ -28,8 +31,11 @@ type VideoChannelClient struct {
 	pendingCandidates map[string][]pionwebrtc.ICECandidateInit
 
 	localTracks []*pionwebrtc.TrackLocalStaticSample
+  videoCtx    context.Context
+  videoCancel context.CancelFunc
 
-	websocket *WebsocketClient
+  websocket   *WebsocketClient
+  dataChannel *DataChannelClient // Optional: for signaling via DataChannel
 
 	remoteListeners []func([]*pionwebrtc.TrackRemote, string)
 }
@@ -86,6 +92,27 @@ func NewVideoChannelClientWithWs(userID, roomName string, isMaster bool, ws *Web
   return c, nil
 }
 
+// SetDataChannel injects the DataChannelClient to be used for signaling fallback/priority.
+func (c *VideoChannelClient) SetDataChannel(dc *DataChannelClient) {
+  c.mu.Lock()
+  c.dataChannel = dc
+  c.mu.Unlock()
+
+  if dc != nil {
+    log.Println("VideoChannelClient: DataChannel transport enabled.")
+    dc.AddOnMessageEventListener(func(msgStr string) {
+      var msg SignalMsg
+      if err := json.Unmarshal([]byte(msgStr), &msg); err != nil {
+        log.Printf("VideoChannelClient: Failed to parse DC msg: %v", err)
+        return
+      }
+      // If 'from' is missing (implicit p2p), we might not be able to recover it easily
+      // without extra info, but SignalMsg usually has it.
+      c.processIncomingSignal(msg)
+    })
+  }
+}
+
 func (c *VideoChannelClient) listenSignaling() {
 	msgs := c.websocket.GetMessages()
 	for raw := range msgs {
@@ -97,21 +124,56 @@ func (c *VideoChannelClient) listenSignaling() {
 			log.Printf("invalid signaling msg: %v", err)
 			continue
 		}
-		log.Printf("video ws: %+v", msg)
-		if msg.Status == 200 {
-      if s, ok := msg.Msg.(string); ok && len(s) >= 11 && s[:11] == WebsocketConnected {
-				c.initVideoCall()
-				continue
-			}
-		}
-		if msg.Channel != nil && *msg.Channel == ChannelWebrtc {
-      if msg.Msg == RequestJoinMediaChannel {
-        _ = c.createVideoPeerConnection(msg.From, c.isMaster)
-      } else {
-        c.handleSignalingData(&msg)
-      }
-		}
-	}
+    c.processIncomingSignal(msg)
+  }
+}
+
+// processIncomingSignal handles logic for both Websocket and DataChannel signals
+func (c *VideoChannelClient) processIncomingSignal(msg SignalMsg) {
+  log.Printf("video signal (src=%s): %+v", msg.From, msg)
+
+  // 1. Handle OnConnected event (usually from WS)
+  if msg.Status == 200 {
+    if s, ok := msg.Msg.(string); ok && len(s) >= 11 && s[:11] == WebsocketConnected {
+      c.initVideoCall()
+      return
+    }
+  }
+
+  // 2. Handle WebRTC Signaling Channel
+  if msg.Channel != nil && *msg.Channel == ChannelWebrtc {
+    if msg.Msg == RequestJoinMediaChannel {
+      // Create peer connection to the joiner
+      _ = c.createVideoPeerConnection(msg.From, c.isMaster)
+    } else {
+      // Handle SDP/Candidate exchange
+      c.handleSignalingData(&msg)
+    }
+  }
+}
+
+// sendSignal sends a message via DataChannel if available, otherwise falls back to WebSocket.
+func (c *VideoChannelClient) sendSignal(msg SignalMsg) error {
+  // Try DataChannel first
+  c.mu.Lock()
+  dc := c.dataChannel
+  c.mu.Unlock()
+
+  if dc != nil {
+    bytes, err := json.Marshal(msg)
+    if err == nil {
+      // DataChannelClient.SendMsg broadcasts to all peers.
+      // Note: This might broadcast to peers who don't care, but that's how the mesh works currently.
+      // Ideally, we should send to specific peer if possible, but the underlying DC client
+      // currently only supports SendMsg (broadcast).
+      dc.SendMsg(string(bytes))
+      return nil
+    }
+    log.Printf("Failed to marshal signal for DC: %v", err)
+  }
+
+  // Fallback to WebSocket
+  return c.websocket.Send(msg)
 }
 
 func (c *VideoChannelClient) initVideoCall() {
@@ -119,7 +181,7 @@ func (c *VideoChannelClient) initVideoCall() {
 	// Here we just send the join request when not master
 	if !c.isMaster {
     m := SignalMsg{Msg: RequestJoinMediaChannel, From: c.userID, RoomId: c.roomID, Channel: getValue(ChannelWebrtc)}
-		_ = c.websocket.Send(m)
+    _ = c.sendSignal(m)
 	}
 }
 
@@ -165,7 +227,7 @@ func (c *VideoChannelClient) handleSignalingData(message *SignalMsg) {
 					msgObj := map[string]interface{}{"type": answer.Type.String(), "sdp": peer.LocalDescription()}
 					enc, _ := json.Marshal(msgObj)
           m := SignalMsg{Channel: getValue(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(enc), From: c.userID, To: sid, RoomId: c.roomID}
-					_ = c.websocket.Send(m)
+          _ = c.sendSignal(m)
 				}
 				c.getAndClearPendingCandidates(sid)
 			}
@@ -220,9 +282,26 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 	c.peers[sid] = pc
 
 	// Add local tracks to peer
+  c.mu.Lock()
 	for _, t := range c.localTracks {
-		_, _ = pc.AddTrack(t)
+    sender, err := pc.AddTrack(t)
+    if err != nil {
+      log.Printf("Failed to add track: %v", err)
+      continue
+    }
+    // Start RTCP reader for sender (to handle PLI/NACK from server/receiver)
+    go func(s *pionwebrtc.RTPSender) {
+      rtcpBuf := make([]byte, 1500)
+      for {
+        if _, _, err := s.Read(rtcpBuf); err != nil {
+          return
+        }
+        // If we receive PLI, we should ideally trigger a Keyframe.
+        // In this simple file-loop implementation, we just continue looping.
+      }
+    }(sender)
 	}
+  c.mu.Unlock()
 
 	pc.OnICECandidate(func(ci *pionwebrtc.ICECandidate) {
 		if ci == nil {
@@ -230,7 +309,7 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 		}
 		j, _ := json.Marshal(map[string]interface{}{"type": "candidate", "sdp": ci.ToJSON()})
     m := SignalMsg{Channel: getValue(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(j), From: c.userID, To: sid, RoomId: c.roomID}
-		_ = c.websocket.Send(m)
+    _ = c.sendSignal(m)
 	})
 
 	pc.OnTrack(func(track *pionwebrtc.TrackRemote, receiver *pionwebrtc.RTPReceiver) {
@@ -261,7 +340,7 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 			obj := map[string]interface{}{"type": offer.Type.String(), "sdp": pc.LocalDescription()}
 			enc, _ := json.Marshal(obj)
       m := SignalMsg{Channel: getValue(ChannelWebrtc), Msg: base64.StdEncoding.EncodeToString(enc), From: c.userID, To: sid, RoomId: c.roomID}
-			_ = c.websocket.Send(m)
+      _ = c.sendSignal(m)
 		}
 	}
 	return nil
@@ -271,6 +350,9 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 
 // Close tears down connections and websocket
 func (c *VideoChannelClient) Close() {
+  if c.videoCancel != nil {
+    c.videoCancel()
+  }
 	c.websocket.Close()
 	for _, pc := range c.peers {
 		_ = pc.Close()
@@ -306,9 +388,129 @@ func (c *VideoChannelClient) AddOnLocalStream(cb func()) {
 	}()
 }
 
+// HandleSignalMsg processes a signaling message from an external source (e.g., DataChannel).
+// This allows the client to handle Offer/Answer/Candidate messages that arrive via DataChannel instead of WebSocket.
+func (c *VideoChannelClient) HandleSignalMsg(msg SignalMsg) {
+	// We handle this in a goroutine to not block the caller (e.g. uav_api message loop)
+	go func() {
+		// Re-use existing logic.
+		// Check for specific join request first, similar to listenSignaling
+		if msg.Channel != nil && *msg.Channel == ChannelWebrtc {
+			if msg.Msg == RequestJoinMediaChannel {
+				_ = c.createVideoPeerConnection(msg.From, c.isMaster)
+			} else {
+				c.handleSignalingData(&msg)
+			}
+		}
+	}()
+}
+
 // ToggleLocalVideo and ToggleLocalMic attempt to enable/disable local tracks
 func (c *VideoChannelClient) ToggleLocalVideo(enable bool) {
-	// Pion TrackLocalStaticSample does not expose enabled flag; this is a no-op placeholder.
+  c.mu.Lock()
+  defer c.mu.Unlock()
+
+  if !enable {
+    if c.videoCancel != nil {
+      c.videoCancel()
+      c.videoCancel = nil
+    }
+    return
+  }
+
+  if c.videoCancel != nil {
+    // Already running
+    return
+  }
+
+  // Create context for video loop
+  c.videoCtx, c.videoCancel = context.WithCancel(context.Background())
+
+  // If no local tracks, try to create one and start feeding it
+  if len(c.localTracks) == 0 {
+    videoTrack, err := pionwebrtc.NewTrackLocalStaticSample(pionwebrtc.RTPCodecCapability{MimeType: pionwebrtc.MimeTypeH264}, "video", "pion")
+    if err != nil {
+      log.Printf("Failed to create video track: %v", err)
+      return
+    }
+    c.localTracks = append(c.localTracks, videoTrack)
+    // Add to existing peers
+    for _, pc := range c.peers {
+      sender, err := pc.AddTrack(videoTrack)
+      if err != nil {
+        log.Println("AddTrack error:", err)
+        continue
+      }
+      go func(s *pionwebrtc.RTPSender) {
+        rtcpBuf := make([]byte, 1500)
+        for {
+          if _, _, err := s.Read(rtcpBuf); err != nil {
+            return
+          }
+        }
+      }(sender)
+    }
+  }
+
+  // Start feeding the first track with file data
+  go c.streamVideoLoop(c.videoCtx, c.localTracks[0])
+}
+
+func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track *pionwebrtc.TrackLocalStaticSample) {
+  // Attempt to open video.h264
+  fileName := "/home/assmin/YourMan.mp4"
+  // Check if file exists
+  if _, err := os.Stat(fileName); os.IsNotExist(err) {
+    log.Printf("Video file %s not found, cannot stream", fileName)
+    return
+  }
+
+  log.Printf("Starting video stream from %s", fileName)
+
+  // Loop forever until context cancelled
+  for {
+    select {
+    case <-ctx.Done():
+      return
+    default:
+    }
+
+    file, err := os.Open(fileName)
+    if err != nil {
+      log.Printf("Error opening video file: %v", err)
+      time.Sleep(time.Second)
+      continue
+    }
+
+    h264 := NewH264Reader(file)
+    ticker := time.NewTicker(33 * time.Millisecond) // ~30 fps
+
+    for {
+      select {
+      case <-ctx.Done():
+        ticker.Stop()
+        file.Close()
+        return
+      case <-ticker.C:
+      }
+
+      nal, err := h264.NextNAL()
+      if err == io.EOF {
+        break // restart file loop
+      }
+      if err != nil {
+        log.Printf("Error reading H264: %v", err)
+        break
+      }
+
+      if err := track.WriteSample(media.Sample{Data: nal, Duration: 33 * time.Millisecond}); err != nil {
+        log.Printf("Error writing sample: %v", err)
+        break
+      }
+    }
+    ticker.Stop()
+    file.Close()
+  }
 }
 
 func (c *VideoChannelClient) ToggleLocalMic(enable bool) {

@@ -99,7 +99,9 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
         this.sid,
         this.roomId,
         null,
-        environment.socket
+        environment.socket,
+        null,
+        this.dataChannelSvc
       );
       // init html control elements
       await VideoElementUtil.initControls(

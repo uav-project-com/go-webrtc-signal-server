@@ -4,6 +4,7 @@ import {WebsocketService} from './websocket.service';
 import {Subscription} from 'rxjs';
 import {CommonRtc} from './common/common-rtc';
 import {REQUEST_JOIN_MEDIA_CHANNEL} from './common/const';
+import {DataChannelService} from './data-channel.service';
 
 /**
  * VideoChannelService
@@ -26,11 +27,14 @@ export class VideoChannelService extends EventTarget {
 
   private readonly websocketSvc: WebsocketService
   private readonly isMaster: any
+  private readonly dataChannelSvc?: DataChannelService;
   msgSubscription: Subscription | null = null
   // callback confirm to join from master's room
   private readonly confirmJoinCb: any;
 
   constructor(userId: string, roomName: string, isMaster: boolean, socketUrl: any)
+  constructor(userId: string, roomName: string, isMaster: any, socketUrl: any, signalServers?: RTCConfiguration,
+              dataChannelSvc?: DataChannelService)
   /**
    * Khởi tạo VideoChannelService
    * @param userId - ID của user hiện tại
@@ -38,41 +42,89 @@ export class VideoChannelService extends EventTarget {
    * @param isMaster mark as master room
    * @param socketUrl - for sending signal message, usually use websocket
    * @param signalServers - Cấu hình ICE server (tùy chọn)
+   * @param dataChannelSvc - (Optional) Sử dụng DataChannel để trao đổi signaling thay vì WebSocket
    */
-  constructor(userId: string, roomName: string, isMaster: any, socketUrl: any, signalServers?: RTCConfiguration) {
+  constructor(userId: string, roomName: string, isMaster: any, socketUrl: any, signalServers?: RTCConfiguration,
+      dataChannelSvc?: DataChannelService) {
     super();
     if (signalServers) {
       this.config = signalServers;
     }
     this.userId = userId;
     this.roomId = roomName;
-    this.isMaster = isMaster
+    this.isMaster = isMaster;
+    this.dataChannelSvc = dataChannelSvc;
+
     // Auto init internal socket service for send signaling data
     this.websocketSvc = new WebsocketService(socketUrl)
     this.websocketSvc.connect(this.roomId, this.userId)
+
     // Khi nhận được signaling message từ websocket
     this.msgSubscription = this.websocketSvc.getMessages().subscribe(async (message) => {
-      console.log(`received ws: ${JSON.stringify(message)}`)
-      if (message && message.status === 200 && message.msg.startsWith('onConnected')) {
-        // auto init data-channel for chat in real life logic
-        this.initVideoCall()
-      } else if (CommonRtc.isSignalMsg(message) && message.msg === REQUEST_JOIN_MEDIA_CHANNEL) {
-        if (this.isMaster === 'true') {
-          if (this.confirmJoinCb) {
-            this.confirmJoinCb(`${message.from} want to join this room!`, () => {
-              this.createVideoPeerConnection(message.from, this.isMaster).then()
-            })
-          } else {
-            this.createVideoPeerConnection(message.from, this.isMaster).then()
+      await this.processIncomingMessage(message);
+    })
+
+    // Nếu có DataChannelService, lắng nghe tin nhắn từ DataChannel
+    if (this.dataChannelSvc) {
+      console.log('VideoChannelService initialized with DataChannel transport support.');
+      this.dataChannelSvc.addOnMessageEventListener((msgStr: string, from: string) => {
+        try {
+          // DataChannel gửi tin nhắn dạng string (thường là JSON)
+          const message = JSON.parse(msgStr);
+          // Đảm bảo message có định dạng đúng trước khi xử lý
+          if (CommonRtc.isSignalMsg(message)) {
+            // Nếu message thiếu 'from' (do dc gửi p2p có thể không gói), gán vào
+             if (!message.from) message.from = from;
+             this.processIncomingMessage(message).then();
           }
+        } catch (e) {
+          console.warn('VideoChannelService: Failed to parse DataChannel message', e);
+        }
+      });
+    }
+
+    console.warn('Hint: call VideoElementUtil.initControls() for automatic setting html for local/remote video element after init this object')
+  }
+
+  /**
+   * Xử lý tin nhắn signaling đến (từ WebSocket hoặc DataChannel)
+   * @param message signal
+   */
+  private async processIncomingMessage(message: any) {
+    console.log(`received signal: ${JSON.stringify(message)}`)
+    if (message && message.status === 200 && message.msg && typeof message.msg === 'string' && message.msg.startsWith('onConnected')) {
+      // auto init data-channel for chat in real life logic
+      this.initVideoCall()
+    } else if (CommonRtc.isSignalMsg(message) && message.msg === REQUEST_JOIN_MEDIA_CHANNEL) {
+      if (this.isMaster === 'true') {
+        if (this.confirmJoinCb) {
+          this.confirmJoinCb(`${message.from} want to join this room!`, () => {
+            this.createVideoPeerConnection(message.from, this.isMaster).then()
+          })
         } else {
           this.createVideoPeerConnection(message.from, this.isMaster).then()
         }
-      } else if (CommonRtc.isSignalMsg(message) && message.channel === Channel.Webrtc) {
-        await this.handleSignalingData(message)
+      } else {
+        this.createVideoPeerConnection(message.from, this.isMaster).then()
       }
-    })
-    console.warn('Hint: call VideoElementUtil.initControls() for automatic setting html for local/remote video element after init this object')
+    } else if (CommonRtc.isSignalMsg(message) && message.channel === Channel.Webrtc) {
+      await this.handleSignalingData(message)
+    }
+  }
+
+  /**
+   * Gửi message signaling đi.
+   * Ưu tiên dùng DataChannel nếu có, ngược lại dùng WebSocket.
+   */
+  private sendSignal(msg: SignalMsg) {
+    if (this.dataChannelSvc) {
+      // Gửi qua Data Channel
+      // Lưu ý: DataChannelService.sendMsg gửi string broadcast cho các peer
+      this.dataChannelSvc.sendMsg(JSON.stringify(msg)).then();
+    } else {
+      // Fallback dùng WebSocket
+      this.websocketSvc.send(msg);
+    }
   }
 
   // ----------------- WebRTC Core ------------------------
@@ -89,7 +141,7 @@ export class VideoChannelService extends EventTarget {
         channel: Channel.Webrtc,
         roomId: this.roomId
       }
-      this.websocketSvc.send(msg)
+      this.sendSignal(msg);
     }
   }
 
@@ -119,7 +171,7 @@ export class VideoChannelService extends EventTarget {
           from: this.userId,
           to: sid
         };
-        this.websocketSvc.send(msg);
+        this.sendSignal(msg);
       } else {
         console.log('ICE gathering complete');
       }
@@ -152,7 +204,7 @@ export class VideoChannelService extends EventTarget {
         from: this.userId,
         to: sid
       };
-      this.websocketSvc.send(msg);
+      this.sendSignal(msg);
     }
     this.peers[sid] = peer;
   }
@@ -185,13 +237,14 @@ export class VideoChannelService extends EventTarget {
           from: this.userId,
           to: sid
         };
-        this.websocketSvc.send(answerMsg);
+        this.sendSignal(answerMsg);
         await this.getAndClearPendingCandidates(sid);
         break;
       }
       case SignalType.answer:
         console.log(`sdp: ${data.sdp}`)
         await this.peers[sid]?.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        await this.getAndClearPendingCandidates(sid);
         break;
       case SignalType.candidate:
         if (this.peers.hasOwnProperty(sid) && this.peers[sid]?.remoteDescription) {
@@ -313,7 +366,7 @@ export class VideoChannelService extends EventTarget {
 
   /**
    * getUserMedia and return to HTML control callback
-   * @param callback
+   * @param callback process stream
    */
   public async addOnLocalStream(callback: any) {
     const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});

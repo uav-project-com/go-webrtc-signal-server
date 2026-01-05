@@ -132,3 +132,116 @@ for _, pc := range c.peers {
     _ = pc.Close()
 }
 ```
+
+# Giả lập Video trong linux test e2e
+Có — trên **Ubuntu bạn hoàn toàn có thể tạo camera “giả lập/ảo” để test `getUserMedia()` cho WebRTC**, và có vài cách phổ biến để làm điều này.
+
+---
+
+## 🛠️ 1. Dùng **v4l2loopback** để tạo Virtual Camera
+
+### Giới thiệu
+
+`v4l2loopback` là module cho Linux cho phép bạn tạo các **thiết bị video ảo** (`/dev/video*`) giống như webcam thật. Đây là cách phổ biến nhất để giả lập camera trong môi trường test. ([Cnblogs][1])
+
+### Cách dùng
+
+1. Cài đặt:
+
+   ```bash
+   sudo apt install v4l2loopback-dkms v4l2loopback-utils
+   ```
+
+2. Tạo camera ảo:
+
+   ```bash
+   sudo modprobe v4l2loopback devices=1 video_nr=10 card_label="VirtualCam" exclusive_caps=1
+   ```
+
+   → sẽ tạo thiết bị `/dev/video10`. ([Cnblogs][1])
+
+3. Đưa video vào camera ảo (ví dụ từ file mp4/y4m):
+
+   ```bash
+   ffmpeg -re -i sample.mp4 -f v4l2 /dev/video10
+   ```
+
+4. Ở browser (Chrome/Firefox), khi gọi `navigator.mediaDevices.getUserMedia()`, bạn sẽ thấy và có thể chọn thiết bị **VirtualCam**.
+
+📌 Ưu điểm:
+
+* Hoạt động trên Ubuntu (V4L2)
+* Hoàn toàn có thể dùng cho `getUserMedia()` trong trình duyệt
+* Không cần hardware thật
+
+📌 Nhược điểm:
+
+* Phải có source video (file hoặc stream) đẩy vào thiết bị
+* Một số app có thể yêu cầu restart Pipewire nếu camera không hiện (trên Ubuntu mới) ([Reddit][2])
+
+---
+
+## 📸 2. Dùng **OBS Studio Virtual Camera**
+
+OBS có tính năng **Virtual Camera**:
+
+* Bạn có thể đưa file video, webcam thật, hoặc scene vào obs và bắt đầu Virtual Camera.
+* Ubuntu cũng hỗ trợ xuất Virtual Camera thông qua **v4l2loopback backend**. ([Reddit][3])
+
+Cách:
+
+1. Cài OBS:
+
+   ```bash
+   sudo apt install obs-studio
+   ```
+2. Bật Virtual Camera trong UI của OBS (“Start Virtual Camera”).
+3. Chọn OBS Virtual Camera trong `getUserMedia()` trong trình duyệt.
+
+⚠️ Có thể cần cài thêm `v4l2loopback` để OBS tạo thiết bị video ảo hoạt động ổn định trên Linux. ([Reddit][3])
+
+---
+
+## 💻 3. Dùng Chrome Flag Fake Devices (chỉ để test trình duyệt)
+
+Chrome có flag để fake device mà không cần webcam:
+
+```
+--use-fake-device-for-media-stream
+--use-file-for-fake-video-capture=/path/to/file.y4m
+```
+
+Ví dụ:
+
+```bash
+google-chrome \
+  --use-fake-ui-for-media-stream \
+  --use-fake-device-for-media-stream \
+  --use-file-for-fake-video-capture=/home/user/test.y4m
+```
+
+→ Chrome sẽ hiện camera ảo, và dùng video từ file `test.y4m` để trả về cho `getUserMedia()`. ([webrtc.github.io][4])
+
+**Lưu ý:** cách này *chỉ dùng để test trong Chrome*, không tạo camera ảo hệ thống.
+
+---
+
+## 📌 Tóm lại lựa chọn nào?
+
+| Phương pháp                  | WebRTC getUserMedia | Cần phần cứng | Độ linh hoạt |
+| ---------------------------- | ------------------- | ------------- | ------------ |
+| **v4l2loopback + FFmpeg**    | ✔️                  | ❌             | ⭐⭐⭐⭐         |
+| **OBS Virtual Camera**       | ✔️                  | ❌             | ⭐⭐⭐          |
+| **Chrome fake device flags** | ✔️ (Chrome)         | ❌             | ⭐⭐           |
+
+👉 Với test WebRTC thật trong trình duyệt hoặc WebRTC endpoint, **v4l2loopback** là cách mạnh nhất; còn nếu chỉ test nhanh trong Chrome thì có thể dùng flag `--use-fake-device-for-media-stream`. ([webrtc.github.io][4])
+
+---
+
+Nếu bạn muốn, tôi có thể gửi **bộ script mẫu để tự động tạo virtual camera + test UI getUserMedia**!
+
+[1]: https://www.cnblogs.com/bigben0123/p/14143742.html?utm_source=chatgpt.com "ubuntu虚拟机下 虚拟摄像头 模拟摄像头 virtualCam - Bigben - 博客园"
+[2]: https://www.reddit.com/r/Ubuntu/comments/1dk9hz2?utm_source=chatgpt.com "Ubuntu Camera Not working"
+[3]: https://www.reddit.com/r/Ubuntu/comments/1e0kqoa?utm_source=chatgpt.com "OBS Studio failed to start virtual camera in Ubuntu 22.04"
+[4]: https://webrtc.github.io/webrtc-org/testing/?utm_source=chatgpt.com "Testing | WebRTC"
+

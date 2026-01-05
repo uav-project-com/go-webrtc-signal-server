@@ -6,7 +6,7 @@
     "start": "ng serve --configuration development --host 0.0.0.0",
     "ssl-start": "NODE_OPTIONS=--openssl-legacy-provider webpack serve",
     "build": "ng build",
-    "common": "ng build webrtc-common",
+    "common-build": "cd webrtc-common && tsc -p tsconfig.json",
     "test": "ng test",
     "lint": "ng lint",
     "e2e": "ng e2e",
