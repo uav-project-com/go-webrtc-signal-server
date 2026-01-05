@@ -457,60 +457,88 @@ func (c *VideoChannelClient) ToggleLocalVideo(enable bool) {
 }
 
 func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track *pionwebrtc.TrackLocalStaticSample) {
-  // Attempt to open video.h264
-  fileName := "/home/assmin/video.h264"
-  // Check if file exists
-  if _, err := os.Stat(fileName); os.IsNotExist(err) {
-    log.Printf("Video file %s not found, cannot stream", fileName)
-    return
-  }
+	env := os.Getenv("APP_ENV")
 
-  log.Printf("Starting video stream from %s", fileName)
+	// Chế độ DEV: Đọc từ file và lặp lại (loop)
+	if env == "dev" {
+		fileName := "/home/assmin/video.h264"
+		log.Printf("Chế độ DEV: Đang stream video từ file %s", fileName)
 
-  // Loop forever until context cancelled
-  for {
-    select {
-    case <-ctx.Done():
-      return
-    default:
-    }
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 
-    file, err := os.Open(fileName)
-    if err != nil {
-      log.Printf("Error opening video file: %v", err)
-      time.Sleep(time.Second)
-      continue
-    }
+			file, err := os.Open(fileName)
+			if err != nil {
+				log.Printf("Lỗi mở file video: %v. Đang thử lại sau 1s...", err)
+				time.Sleep(time.Second)
+				continue
+			}
 
-    h264 := NewH264Reader(file)
-    ticker := time.NewTicker(33 * time.Millisecond) // ~30 fps
+			h264 := NewH264Reader(file)
+			ticker := time.NewTicker(33 * time.Millisecond) // Giả lập ~30 FPS
 
-    for {
-      select {
-      case <-ctx.Done():
-        ticker.Stop()
-        file.Close()
-        return
-      case <-ticker.C:
-      }
+			for {
+				select {
+				case <-ctx.Done():
+					ticker.Stop()
+					file.Close()
+					return
+				case <-ticker.C:
+				}
 
-      nal, err := h264.NextNAL()
-      if err == io.EOF {
-        break // restart file loop
-      }
-      if err != nil {
-        log.Printf("Error reading H264: %v", err)
-        break
-      }
+				nal, err := h264.NextNAL()
+				if err == io.EOF {
+					break // Hết file, thoát vòng lặp nhỏ để mở lại file (loop)
+				}
+				if err != nil {
+					log.Printf("Lỗi đọc H264: %v", err)
+					break
+				}
 
-      if err := track.WriteSample(media.Sample{Data: nal, Duration: 33 * time.Millisecond}); err != nil {
-        log.Printf("Error writing sample: %v", err)
-        break
-      }
-    }
-    ticker.Stop()
-    file.Close()
-  }
+				if err := track.WriteSample(media.Sample{Data: nal, Duration: 33 * time.Millisecond}); err != nil {
+					log.Printf("Lỗi ghi sample: %v", err)
+					break
+				}
+			}
+			ticker.Stop()
+			file.Close()
+		}
+	} else {
+		// Chế độ PRODUCTION: Sử dụng CameraManager (Dùng cho Camera Raspberry Pi 5)
+		log.Printf("Chế độ PRODUCTION: Đang stream video từ CameraManager...")
+		camManager := GetCameraManager()
+		if err := camManager.Start(); err != nil {
+			log.Printf("Lỗi khởi động CameraManager: %v", err)
+			return
+		}
+
+		h264 := NewH264Reader(camManager.GetReader())
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			nal, err := h264.NextNAL()
+			if err != nil {
+				log.Printf("Lỗi đọc từ CameraManager: %v. Đang thử lại...", err)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+			// Trong production, chúng ta đẩy sample đi ngay khi nhận được
+			if err := track.WriteSample(media.Sample{Data: nal, Duration: 33 * time.Millisecond}); err != nil {
+				log.Printf("Lỗi ghi sample lên WebRTC: %v", err)
+				return
+			}
+		}
+	}
 }
 
 func (c *VideoChannelClient) ToggleLocalMic(enable bool) {

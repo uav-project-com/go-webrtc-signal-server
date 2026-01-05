@@ -22,55 +22,67 @@ type uavAPI struct {
 }
 
 func (a *uavAPI) UavCommandHandler(cmd string) error {
-	// 1. Try to parse as JSON SignalMsg (from Angular DataChannel signaling)
-	var msg webrtc.SignalMsg
-	if err := json.Unmarshal([]byte(cmd), &msg); err == nil {
-		// Is this a video signaling message?
+  // 1. Thử parse lệnh JSON (Từ Angular DataChannel) TODO: chưa test....
+  var data map[string]interface{}
+  if err := json.Unmarshal([]byte(cmd), &data); err == nil {
+    // Xử lý lệnh điều khiển Camera chuyên sâu
+    if action, ok := data["action"].(string); ok && action == ActionCamera {
+      camCmd, _ := data["cmd"].(string)
+      val, _ := data["val"].(float64)
+      camManager := webrtc.GetCameraManager()
+
+      log.Printf("Camera Control: Lệnh %s với giá trị %v", camCmd, val)
+      switch camCmd {
+      case CmdCameraZoom:
+        camManager.SetZoom(val)
+      case CmdCameraFocus:
+        camManager.SetFocus(int(val))
+      case CmdCameraSwitch:
+        camManager.SwitchCamera(int(val))
+      case CmdCameraReset:
+        err := camManager.Restart()
+        if err != nil {
+          return err
+        }
+      case CmdCameraISO:
+        camManager.SetISO(int(val))
+      }
+      return nil
+    }
+
+    // Xử lý signaling WebRTC (logic cũ)
+    var msg webrtc.SignalMsg
+    _ = json.Unmarshal([]byte(cmd), &msg)
 		isVideoSignal := (msg.Msg == webrtc.RequestJoinMediaChannel) ||
 			(msg.Channel != nil && *msg.Channel == webrtc.ChannelWebrtc)
 
 		if isVideoSignal {
-			log.Println("Received Video Signaling via DataChannel. Forwarding to VideoChannelClient...")
-
-			// Ensure VideoChannel is initialized
+      log.Println("Nhận tín hiệu Video qua DataChannel. Đang chuyển tiếp...")
 			if a.videoChannel == nil {
-				log.Println("Initializing VideoChannelClient on demand...")
 				var errInit error
 				a.videoChannel, errInit = a.socketSvc.InitVideoChannel(a.channelInfo)
 				if errInit != nil {
 					return errInit
 				}
 			}
-
-			// Forward the message to VideoChannelClient
 			a.videoChannel.HandleSignalMsg(msg)
-
-			// Special case: If it's a join request, we might want to auto-start sending video?
-			// The original logic toggled video on CmdVideoToggle.
-			// Angular sends RequestJoinMediaChannel when user clicks "Camera".
-			// So we should probably enable our video sending too.
-			if msg.Msg == webrtc.RequestJoinMediaChannel {
-				if !a.videoEnabled {
-					log.Println("Auto-enabling local video stream due to Join Request.")
-					a.videoEnabled = true
-					a.videoChannel.ToggleLocalVideo(true)
-				}
+      if msg.Msg == webrtc.RequestJoinMediaChannel && !a.videoEnabled {
+        a.videoEnabled = true
+        a.videoChannel.ToggleLocalVideo(true)
 			}
 			return nil
 		}
 	}
 
-	// 2. Handle legacy/plain text commands
-	log.Printf("Processing plain command: %s", cmd)
-	if cmd == CmdVideoToggle { // start or stop video stream
+  // 2. Xử lý các lệnh văn bản thuần túy (Legacy) TODO: chưa test....
+  log.Printf("Xử lý lệnh văn bản: %s", cmd)
+  if cmd == CmdVideoToggle {
 		a.videoEnabled = !a.videoEnabled
-		if a.videoEnabled {
-			if a.videoChannel == nil {
-				var err error
-				a.videoChannel, err = a.socketSvc.InitVideoChannel(a.channelInfo)
-				if err != nil {
-					return err
-				}
+    if a.videoEnabled && a.videoChannel == nil {
+      var err error
+      a.videoChannel, err = a.socketSvc.InitVideoChannel(a.channelInfo)
+      if err != nil {
+        return err
 			}
 		}
 		if a.videoChannel != nil {
