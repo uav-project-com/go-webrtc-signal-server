@@ -6,7 +6,122 @@
 	},
 	"item": [
 		{
-			"name": "login",
+			"name": "e2e",
+			"item": [
+				{
+					"name": "e2e-start",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{TOKEN}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3001/uav/start",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"uav",
+								"start"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "e2e-send-command",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{TOKEN}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"message\": \"any-msg-here\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3001/e2e/command",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"e2e",
+								"command"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Hello world - gin - golang",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{TOKEN}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3001/auth/hello",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"auth",
+								"hello"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "0.login",
 			"event": [
 				{
 					"listen": "test",
@@ -58,48 +173,7 @@
 			"response": []
 		},
 		{
-			"name": "Hello world - gin - golang",
-			"event": [
-				{
-					"listen": "prerequest",
-					"script": {
-						"exec": [
-							""
-						],
-						"type": "text/javascript"
-					}
-				}
-			],
-			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{TOKEN}}",
-							"type": "string"
-						}
-					]
-				},
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "http://localhost:3001/auth/hello",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "3001",
-					"path": [
-						"auth",
-						"hello"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "start",
+			"name": "1.start",
 			"request": {
 				"auth": {
 					"type": "bearer",
@@ -123,75 +197,6 @@
 					"path": [
 						"uav",
 						"start"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "e2e-start",
-			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjU2MTAyNjAsIm9yaWdfaWF0IjoxNzY1NTk5NDYwLCJzdWIiOiIxIiwidWlkIjoiYWRtaW4ifQ.GdrkivjIY3jrmQfyOv58D56UuRG4XNORpo4A1mc7tz0",
-							"type": "string"
-						}
-					]
-				},
-				"method": "POST",
-				"header": [],
-				"url": {
-					"raw": "http://localhost:3001/uav/start",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "3001",
-					"path": [
-						"uav",
-						"start"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "e2e-send-command",
-			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{TOKEN}}",
-							"type": "string"
-						}
-					]
-				},
-				"method": "POST",
-				"header": [],
-				"body": {
-					"mode": "raw",
-					"raw": "{\r\n    \"message\": \"any-msg-here\"\r\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "http://localhost:3001/e2e/command",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "3001",
-					"path": [
-						"e2e",
-						"command"
 					]
 				}
 			},

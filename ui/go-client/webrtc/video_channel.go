@@ -458,7 +458,7 @@ func (c *VideoChannelClient) ToggleLocalVideo(enable bool) {
 
 func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track *pionwebrtc.TrackLocalStaticSample) {
   // Attempt to open video.h264
-  fileName := "/home/assmin/YourMan.mp4"
+  fileName := "/home/assmin/video.h264"
   // Check if file exists
   if _, err := os.Stat(fileName); os.IsNotExist(err) {
     log.Printf("Video file %s not found, cannot stream", fileName)

@@ -4,7 +4,7 @@
 
 export const environment = {
   production: false,
-  socket: 'ws://172.29.111.21:8080/ws',
+  socket: 'ws://192.168.1.5:8080/ws',
   debug: 'warn'
 };
 

@@ -99,3 +99,17 @@ The system consists of:
 *   **Go:** Follows a layered architecture (Controller -> Service -> Repository).
 *   **Angular:** Standard Angular CLI project structure.
 *   **WebRTC:** Uses the `pion/webrtc` library on the backend and native WebRTC APIs (wrapped in `webrtc-common`) on the frontend.
+
+## Convert video mp4 for test localhost go-client
+```bash
+ffmpeg -i video_h264.mp4 -c:v libx264 -profile:v baseline -level 3.1 -pix_fmt yuv420p -an -bsf:v h264_mp4toannexb -f h264 video.h264
+```
+
+## Thứ tự test WebRTC:
+1. Run `go-webrtc-signal-server`
+2. `cd ui && npm start`
+3. Open `http://localhost:4200` in 1 browser tab
+4. Run inside wsl/linux: `cd ui/webrtc-client-go && go run main.go`
+5. Call e2e api order: 1, 2
+6. Join default room in browser: 24G-ZT0-Q8T
+7. Click on icon Video in Browser.

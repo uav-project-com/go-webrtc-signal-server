@@ -1,0 +1,18 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="go build go-rest-api" type="GoApplicationRunConfiguration" factoryName="Go Application" nameIsGenerated="true">
+    <module name="go-webrtc-signal-server" />
+    <target name="@@@LOCAL@@@" />
+    <working_directory value="$PROJECT_DIR$" />
+    <go_parameters value="-tags dev" />
+    <envs>
+      <env name="GODEBUG" value="http2debug=2" />
+      <env name="CGO_ENABLED" value="1" />
+    </envs>
+    <kind value="PACKAGE" />
+    <package value="go-rest-api" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/main.go" />
+    <option name="build_on_remote_target" value="true" />
+    <method v="2" />
+  </configuration>
+</component>

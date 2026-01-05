@@ -1,7 +1,7 @@
 app:
   port: 8080
 database:
-  host: "localhost"
+  host: "172.29.96.1"
   port: 5432
   username: "postgres"
   password: "password"
