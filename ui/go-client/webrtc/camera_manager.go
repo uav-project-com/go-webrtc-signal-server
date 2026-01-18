@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -20,8 +22,8 @@ type CameraSettings struct {
 	Zoom     float64 `json:"zoom"`  // 1.0 - 10.0
 }
 
-// CameraManager quản lý tiến trình libcamera-vid và các lệnh điều khiển phần cứng
-type CameraManager struct {
+// PiCameraManager quản lý tiến trình libcamera-vid và các lệnh điều khiển phần cứng cho Raspberry Pi
+type PiCameraManager struct {
 	mu       sync.Mutex
 	cmd      *exec.Cmd
 	stdout   io.ReadCloser
@@ -32,16 +34,32 @@ type CameraManager struct {
 	pipeWriter *io.PipeWriter
 }
 
+// Check if PiCameraManager implements ICameraManager
+var _ ICameraManager = (*PiCameraManager)(nil)
+
 var (
-	instance *CameraManager
+	instance ICameraManager
 	once     sync.Once
 )
 
-// GetCameraManager trả về singleton instance của CameraManager
-func GetCameraManager() *CameraManager {
+// GetCameraManager trả về singleton instance của ICameraManager
+// Tự động phát hiện môi trường để chọn PiCameraManager hoặc LaptopCameraManager
+func GetCameraManager() ICameraManager {
 	once.Do(func() {
+		osName := getOSName()
+		log.Printf("Detected OS: %s", osName)
+
+		if strings.Contains(strings.ToLower(osName), "ubuntu") ||
+			strings.Contains(strings.ToLower(osName), "arch") ||
+			strings.Contains(strings.ToLower(osName), "fedora") {
+			log.Println("Using LaptopCameraManager (ffmpeg)")
+			instance = NewLaptopCameraManager()
+			return
+		}
+
+		log.Println("Using PiCameraManager (libcamera)")
 		pr, pw := io.Pipe()
-		instance = &CameraManager{
+		instance = &PiCameraManager{
 			pipeReader: pr,
 			pipeWriter: pw,
 			settings: CameraSettings{
@@ -58,8 +76,16 @@ func GetCameraManager() *CameraManager {
 	return instance
 }
 
+func getOSName() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "unknown"
+	}
+	return string(data)
+}
+
 // Start bắt đầu tiến trình camera
-func (m *CameraManager) Start() error {
+func (m *PiCameraManager) Start() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -70,7 +96,7 @@ func (m *CameraManager) Start() error {
 	return m.startProcess()
 }
 
-func (m *CameraManager) startProcess() error {
+func (m *PiCameraManager) startProcess() error {
 	// Xây dựng tham số cho libcamera-vid
 	args := []string{
 		"-t", "0",
@@ -116,7 +142,7 @@ func (m *CameraManager) startProcess() error {
 }
 
 // Restart khởi động lại tiến trình (dùng khi lag hoặc đổi mắt cam/zoom)
-func (m *CameraManager) Restart() error {
+func (m *PiCameraManager) Restart() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -130,7 +156,7 @@ func (m *CameraManager) Restart() error {
 }
 
 // SetFocus điều khiển lấy nét qua v4l2-ctl (không cần restart)
-func (m *CameraManager) SetFocus(val int) {
+func (m *PiCameraManager) SetFocus(val int) {
 	m.settings.Focus = val
 	// Lưu ý: /dev/v4l-subdevX có thể thay đổi tùy hệ thống, thường là subdev0 hoặc 1 cho camera
 	// Ở đây dùng lệnh shell để tìm và set cho nhanh hoặc mặc định subdev của Pi
@@ -138,7 +164,7 @@ func (m *CameraManager) SetFocus(val int) {
 }
 
 // SetISO điều khiển độ nhạy sáng (Gain)
-func (m *CameraManager) SetISO(val int) {
+func (m *PiCameraManager) SetISO(val int) {
 	m.settings.ISO = val
 	// Có thể dùng v4l2-ctl hoặc phải restart libcamera-vid tùy driver
 	// Ở đây giả định cần restart để áp dụng chính xác cho libcamera
@@ -146,7 +172,7 @@ func (m *CameraManager) SetISO(val int) {
 }
 
 // SwitchCamera chuyển đổi giữa các mắt camera
-func (m *CameraManager) SwitchCamera(id int) {
+func (m *PiCameraManager) SwitchCamera(id int) {
 	if m.settings.CameraID == id {
 		return
 	}
@@ -155,22 +181,28 @@ func (m *CameraManager) SwitchCamera(id int) {
 }
 
 // SetZoom điều khiển Zoom kỹ thuật số (ROI)
-func (m *CameraManager) SetZoom(val float64) {
-	if val < 1.0 { val = 1.0 }
+func (m *PiCameraManager) SetZoom(val float64) {
+	if val < 1.0 {
+		val = 1.0
+	}
 	m.settings.Zoom = val
 	m.Restart()
 }
 
 // GetReader trả về pipe để đọc dữ liệu H264
-func (m *CameraManager) GetReader() io.Reader {
+func (m *PiCameraManager) GetReader() io.Reader {
 	return m.pipeReader
 }
 
 // Stop dừng camera hoàn toàn
-func (m *CameraManager) Stop() {
+func (m *PiCameraManager) Stop() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
 	}
+}
+
+func (m *PiCameraManager) IsRTP() bool {
+	return false
 }

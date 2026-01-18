@@ -245,3 +245,10 @@ Nếu bạn muốn, tôi có thể gửi **bộ script mẫu để tự động 
 [3]: https://www.reddit.com/r/Ubuntu/comments/1e0kqoa?utm_source=chatgpt.com "OBS Studio failed to start virtual camera in Ubuntu 22.04"
 [4]: https://webrtc.github.io/webrtc-org/testing/?utm_source=chatgpt.com "Testing | WebRTC"
 
+## Test command feed video on laptop:
+```bash
+ffmpeg -f v4l2 -input_format mjpeg -framerate 30 -video_size 1280x720 -i /dev/video0 \
+-c:v libx264 -preset ultrafast -tune zerolatency \
+-profile:v baseline -pix_fmt yuv420p -g 30 \
+-f h264 - | ffplay -fflags nobuffer -flags low_delay -
+```
