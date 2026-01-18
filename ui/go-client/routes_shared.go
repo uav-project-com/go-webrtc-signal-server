@@ -98,7 +98,7 @@ var db *sql.DB
 
 func initDB() (*sql.DB, error) {
 	var err error
-	db, err = sql.Open("sqlite3", "/mnt/x/workspace/0.FPV/go-webrtc-signal-server/ui/go-client/SQLite.db")
+	db, err = sql.Open("sqlite3", "/media/hieutt/Data/workspace/0.FPV/go-webrtc-signal-server/ui/go-client/SQLite.db")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}
