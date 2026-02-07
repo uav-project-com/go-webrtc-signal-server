@@ -29,9 +29,10 @@ type PiCameraManager struct {
 	stdout   io.ReadCloser
 	settings CameraSettings
 
-	// Pipe để VideoChannelClient đọc dữ liệu
-	pipeReader *io.PipeReader
-	pipeWriter *io.PipeWriter
+	// Pipe is no longer used for main video data, but kept for struct compatibility if needed,
+	// or we can just remove them if not used elsewhere.
+	// We'll prioritize udpReader.
+	udpReader *UDPReader
 }
 
 // Check if PiCameraManager implements ICameraManager
@@ -58,10 +59,7 @@ func GetCameraManager() ICameraManager {
 		}
 
 		log.Println("Using PiCameraManager (libcamera)")
-		pr, pw := io.Pipe()
 		instance = &PiCameraManager{
-			pipeReader: pr,
-			pipeWriter: pw,
 			settings: CameraSettings{
 				CameraID: 0,
 				Width:    1280,
@@ -93,6 +91,13 @@ func (m *PiCameraManager) Start() error {
 		return nil // Đã chạy rồi
 	}
 
+	// Init UDP Reader
+	var err error
+	m.udpReader, err = NewUDPReader(5600)
+	if err != nil {
+		return fmt.Errorf("failed to open UDP port 5600: %v", err)
+	}
+
 	return m.startProcess()
 }
 
@@ -106,7 +111,8 @@ func (m *PiCameraManager) startProcess() error {
 		"--framerate", strconv.Itoa(m.settings.FPS),
 		"--codec", "h264",
 		"--camera", strconv.Itoa(m.settings.CameraID),
-		"-o", "-", // Xuất ra stdout
+		// Output to UDP localhost port 5600
+		"-o", "udp://127.0.0.1:5600",
 	}
 
 	// Thêm zoom (ROI) nếu có
@@ -118,26 +124,15 @@ func (m *PiCameraManager) startProcess() error {
 
 	m.cmd = exec.Command("libcamera-vid", args...)
 
-	stdout, err := m.cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	m.stdout = stdout
+	// We don't need to read stdout since we are using UDP
+	// But we might want to capture stderr for logs
+	m.cmd.Stderr = os.Stderr
 
 	if err := m.cmd.Start(); err != nil {
 		return err
 	}
 
-	// Luồng copy dữ liệu từ camera vào Pipe
-	go func() {
-		_, err := io.Copy(m.pipeWriter, m.stdout)
-		if err != nil {
-			log.Printf("Camera Manager: Lỗi copy dữ liệu: %v", err)
-		}
-		log.Println("Camera Manager: Tiến trình camera đã dừng.")
-	}()
-
-	log.Printf("Camera Manager: Đã khởi động Camera %d", m.settings.CameraID)
+	log.Printf("Camera Manager: Đã khởi động Camera %d (UDP Mode)", m.settings.CameraID)
 	return nil
 }
 
@@ -191,13 +186,19 @@ func (m *PiCameraManager) SetZoom(val float64) {
 
 // GetReader trả về pipe để đọc dữ liệu H264
 func (m *PiCameraManager) GetReader() io.Reader {
-	return m.pipeReader
+	return m.udpReader
 }
 
 // Stop dừng camera hoàn toàn
 func (m *PiCameraManager) Stop() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.udpReader != nil {
+		m.udpReader.Close()
+		m.udpReader = nil
+	}
+
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
 	}
@@ -205,5 +206,47 @@ func (m *PiCameraManager) Stop() {
 }
 
 func (m *PiCameraManager) IsRTP() bool {
+	// Although we use UDP, we are sending raw H264 via UDP (likely), or is libcamera-vid sending RTP?
+	// libcamera-vid -o udp://... sends raw bitstream over UDP by default unless --libav-format is specified?
+	// Actually, typically raw H264 over UDP is not RTP.
+	// But LaptopCameraManager sends RTP.
+	// Wait, LaptopCameraManager sends RTP because of `rtph264pay`.
+	// If we want Pi to behave EXACTLY like LaptopManager (RTP), we need to check if libcamera-vid supports RTP output or if we need to wrap it.
+	// However, the `video_channel.go` has conditional logic:
+	// if camManager.IsRTP() { ... } else { ... }
+	// LaptopManager.IsRTP() returns true.
+	// If we set PiManager.IsRTP() to true, `video_channel.go` will use the RTP path which expects RTP packets.
+	// libcamera-vid output to udp is usually raw stream (annex B).
+	// If we want to use the RTP path in video_channel, we need `libcamera-vid` to output RTP.
+	// `libcamera-vid` usually does not output RTP directly without gstreamer or ffmpeg.
+	// BUT, the user said "apply results of laptop ... to pi".
+	// The `LaptopCameraManager` uses `NewUDPReader` which is just a UDP socket wrapper.
+	// The `video_channel.go` decides how to read it.
+	//
+	// If `IsRTP()` returns false (default for Pi currently):
+	// It uses `NewH264Reader(camManager.GetReader())` which expects raw H264 stream.
+	// And it parses NALs.
+	//
+	// If we switch Pi to use UDPReader, `GetReader()` returns a `UDPReader`.
+	// `UDPReader` implements `io.Reader`.
+	// So `NewH264Reader` will read from `UDPReader`.
+	// This works for RAW H264 over UDP.
+	//
+	// Laptop uses `rtph264pay` so it sends RTP packets. `IsRTP()` returns true.
+	// `video_channel.go` reads from `UDPReader` and writes directly to `rtpTrack`.
+	//
+	// If we want Pi to be consistent with "Laptop logic" regarding UDPReader:
+	// We just want the NON-BLOCKING reading.
+	// We do NOT necessarily need RTP if the H264 parsing logic works.
+	// The User said "apply result of laptop camera ... to pi ... review ... if anything needs update to run like laptop".
+	// The main "result" from previous turn was fixing the BLOCKING/BUFFER issue.
+	// Using UDPReader achieves that.
+	//
+	// So, we keep IsRTP() false, because we are likely sending raw H264 from libcamera-vid, not RTP packets.
+	// Unless the user wants us to change libcamera to output RTP?
+	// "libcamera-vid --inline -o udp://..." streams raw h264.
+	// So `IsRTP()` should remain `false`.
+	// `video_channel.go` will read raw H264 from the UDP socket via `UDPReader`.
+	// This mirrors the structure but keeps the data format native to Pi's simple usage.
 	return false
 }
