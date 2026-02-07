@@ -485,6 +485,7 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 			log.Printf("Error start cam: %v", err)
 			return
 		}
+		defer camManager.Stop()
 
 		reader := camManager.GetReader()
 		buf := make([]byte, 15000) // Jumbo Frame Safe

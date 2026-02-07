@@ -140,6 +140,7 @@ func (m *LaptopCameraManager) Stop() {
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
 	}
+	m.cmd = nil
 }
 
 func (m *LaptopCameraManager) GetReader() io.Reader {
