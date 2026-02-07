@@ -1,10 +1,10 @@
-import {AfterViewInit, Component, ElementRef, OnInit, ViewChild, ViewEncapsulation} from '@angular/core';
-import {ActivatedRoute} from '@angular/router';
-import {NgClass, NgForOf, NgIf} from '@angular/common';
-import {FormsModule} from '@angular/forms';
-import {HomeComponent} from '../home/home.component';
-import {DataChannelService, VideoChannelService, VideoElementUtil,} from 'webrtc-common';
-import {environment} from '../../environments/environment';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { NgClass, NgForOf, NgIf } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { HomeComponent } from '../home/home.component';
+import { DataChannelService, VideoChannelService, VideoElementUtil, } from 'webrtc-common';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-call',
@@ -21,7 +21,7 @@ import {environment} from '../../environments/environment';
 export class CallComponentV2 implements OnInit, AfterViewInit {
 
   // ----------------- Khởi tạo & Lifecycle -----------------
-  constructor(private readonly route: ActivatedRoute) {}
+  constructor(private readonly route: ActivatedRoute) { }
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   remoteUsers: string[] = ['user1', 'user2']; // dummy IDs
   isMinimized = false;
@@ -38,11 +38,11 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
   videoChannelSvc!: VideoChannelService;
   remoteStreams: { [userId: string]: MediaStream } = {};
 
-//   Toast
+  //   Toast
   showToast = false;
   toastMessage = 'Do you want to continue?';
 
-/* Toast dialog */
+  /* Toast dialog */
   private toastYesCallback: (() => void) | null = null;
 
   ngOnInit(): void {
@@ -70,7 +70,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
     this.dataChannelSvc.onDestroy()
   }
 
-// ================================== WebRTC & Signaling ===============================================================
+  // ================================== WebRTC & Signaling ===============================================================
   private initDataChannel() { // Converted
     if (this.dataChannelSvc == null) {
       // isMaster = true:  (#0) A tạo room ID=1234 và chờ người khác join
@@ -108,12 +108,14 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
         this.videoChannelSvc,
         this.localVideo.nativeElement,
         this.remoteStreams,
-        this.remoteUsers
+        this.remoteUsers,
+        environment.enableLocalVideo,
+        environment.enableLocalAudio
       ).then()
     }
   }
 
-// ----------------- Điều khiển Media ----------------------------------------------------------------------
+  // ----------------- Điều khiển Media ----------------------------------------------------------------------
 
   toggleCamera() {
     if (!this.videoChannelSvc) {
@@ -161,7 +163,7 @@ export class CallComponentV2 implements OnInit, AfterViewInit {
 
   // ----------------- UI & Toast ------------------------------------------------------------------------------
   copyLink() {
-    navigator.clipboard.writeText(this.joinLink).then(_ => {});
+    navigator.clipboard.writeText(this.joinLink).then(_ => { });
   }
 
   shareInvite() {

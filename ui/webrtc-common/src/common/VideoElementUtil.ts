@@ -1,4 +1,4 @@
-import {VideoChannelService} from '../video-channel.service';
+import { VideoChannelService } from '../video-channel.service';
 
 export class VideoElementUtil {
   static readonly micBtnClass = 'toggle-mic-btn'
@@ -75,12 +75,12 @@ export class VideoElementUtil {
   }
 
   private static readonly _onHangUp = () => {
-  if (VideoElementUtil.videoChannelSvc && typeof VideoElementUtil.videoChannelSvc.hangUp === 'function') {
-    VideoElementUtil.videoChannelSvc.hangUp()
-  } else {
-    console.warn('VideoElementUtil: videoSvc or hangUp() not available')
+    if (VideoElementUtil.videoChannelSvc && typeof VideoElementUtil.videoChannelSvc.hangUp === 'function') {
+      VideoElementUtil.videoChannelSvc.hangUp()
+    } else {
+      console.warn('VideoElementUtil: videoSvc or hangUp() not available')
+    }
   }
-}
 
   private static readonly _onMicClick = () => {
     console.log('VideoElementUtil: toggle mic clicked')
@@ -100,8 +100,10 @@ export class VideoElementUtil {
    * Call this after `videoChannelSvc` is created.
    */
   public static async initControls(videoSvc: VideoChannelService, localVideo: HTMLVideoElement,
-                                   listRemoteStream: { [userId: string]: MediaStream },
-                                   userIds: string[]
+    listRemoteStream: { [userId: string]: MediaStream },
+    userIds: string[],
+    videoEnabled: boolean,
+    audioEnabled: boolean
   ) {
     VideoElementUtil.videoChannelSvc = videoSvc
     // insert video element khi có remote stream connected
@@ -117,7 +119,7 @@ export class VideoElementUtil {
     });
     await VideoElementUtil.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
       localVideo.srcObject = stream; // add local media to html element
-    })
+    }, videoEnabled, audioEnabled)
     VideoElementUtil.addToggleMicEvent()
     VideoElementUtil.addHangUpEvent()
     this.ngAfterViewChecked(userIds, listRemoteStream)

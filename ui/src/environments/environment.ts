@@ -4,8 +4,10 @@
 
 export const environment = {
   production: false,
-  socket: 'ws://192.168.1.5:8080/ws',
-  debug: 'warn'
+  socket: 'ws://localhost:8080/ws',
+  debug: 'warn',
+  enableLocalVideo: false,
+  enableLocalAudio: false
 };
 
 /*

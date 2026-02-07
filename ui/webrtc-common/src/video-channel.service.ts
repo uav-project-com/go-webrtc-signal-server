@@ -1,10 +1,10 @@
-import {Channel, SignalMsg, SignalType} from './dto/SignalMsg';
-import {Base64Util} from './common/Base64Util';
-import {WebsocketService} from './websocket.service';
-import {Subscription} from 'rxjs';
-import {CommonRtc} from './common/common-rtc';
-import {REQUEST_JOIN_MEDIA_CHANNEL} from './common/const';
-import {DataChannelService} from './data-channel.service';
+import { Channel, SignalMsg, SignalType } from './dto/SignalMsg';
+import { Base64Util } from './common/Base64Util';
+import { WebsocketService } from './websocket.service';
+import { Subscription } from 'rxjs';
+import { CommonRtc } from './common/common-rtc';
+import { REQUEST_JOIN_MEDIA_CHANNEL } from './common/const';
+import { DataChannelService } from './data-channel.service';
 
 /**
  * VideoChannelService
@@ -15,7 +15,7 @@ export class VideoChannelService extends EventTarget {
 
   // ----------------- Khởi tạo & cấu hình -----------------
   private readonly config: RTCConfiguration = {
-    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
   };
   private readonly userId: string;
   private readonly roomId: string;
@@ -34,7 +34,7 @@ export class VideoChannelService extends EventTarget {
 
   constructor(userId: string, roomName: string, isMaster: boolean, socketUrl: any)
   constructor(userId: string, roomName: string, isMaster: any, socketUrl: any, signalServers?: RTCConfiguration,
-              dataChannelSvc?: DataChannelService)
+    dataChannelSvc?: DataChannelService)
   /**
    * Khởi tạo VideoChannelService
    * @param userId - ID của user hiện tại
@@ -45,7 +45,7 @@ export class VideoChannelService extends EventTarget {
    * @param dataChannelSvc - (Optional) Sử dụng DataChannel để trao đổi signaling thay vì WebSocket
    */
   constructor(userId: string, roomName: string, isMaster: any, socketUrl: any, signalServers?: RTCConfiguration,
-      dataChannelSvc?: DataChannelService) {
+    dataChannelSvc?: DataChannelService) {
     super();
     if (signalServers) {
       this.config = signalServers;
@@ -74,8 +74,8 @@ export class VideoChannelService extends EventTarget {
           // Đảm bảo message có định dạng đúng trước khi xử lý
           if (CommonRtc.isSignalMsg(message)) {
             // Nếu message thiếu 'from' (do dc gửi p2p có thể không gói), gán vào
-             if (!message.from) message.from = from;
-             this.processIncomingMessage(message).then();
+            if (!message.from) message.from = from;
+            this.processIncomingMessage(message).then();
           }
         } catch (e) {
           console.warn('VideoChannelService: Failed to parse DataChannel message', e);
@@ -166,7 +166,7 @@ export class VideoChannelService extends EventTarget {
       if (event.candidate) {
         const msg: SignalMsg = {
           channel: Channel.Webrtc,
-          msg: btoa(JSON.stringify({type: 'candidate', sdp: event.candidate})),
+          msg: btoa(JSON.stringify({ type: 'candidate', sdp: event.candidate })),
           roomId: this.roomId,
           from: this.userId,
           to: sid
@@ -184,13 +184,13 @@ export class VideoChannelService extends EventTarget {
         this.streams[sid] = new MediaStream();
       }
       this.streams[sid].addTrack(event.track);
-      this.dispatchEvent(new CustomEvent('remoteStream', {detail: {stream: this.streams[sid], from: sid}}));
+      this.dispatchEvent(new CustomEvent('remoteStream', { detail: { stream: this.streams[sid], from: sid } }));
     };
 
     // Lắng nghe trạng thái kết nối
     peer.onconnectionstatechange = () => {
       console.log(`connectionState: ${peer.connectionState}`)
-      this.dispatchEvent(new CustomEvent('connectionState', {detail: {state: peer.connectionState, from: sid}}));
+      this.dispatchEvent(new CustomEvent('connectionState', { detail: { state: peer.connectionState, from: sid } }));
     };
 
     // Nếu là caller, tạo offer và gửi cho peer
@@ -199,7 +199,7 @@ export class VideoChannelService extends EventTarget {
       await peer.setLocalDescription(offer);
       const msg: SignalMsg = {
         channel: Channel.Webrtc,
-        msg: btoa(JSON.stringify({type: offer.type, sdp: peer.localDescription})),
+        msg: btoa(JSON.stringify({ type: offer.type, sdp: peer.localDescription })),
         roomId: this.roomId,
         from: this.userId,
         to: sid
@@ -232,7 +232,7 @@ export class VideoChannelService extends EventTarget {
         await this.peers[sid]?.setLocalDescription(answer);
         const answerMsg: SignalMsg = {
           channel: Channel.Webrtc,
-          msg: btoa(JSON.stringify({type: answer.type, sdp: this.peers[sid]?.localDescription})),
+          msg: btoa(JSON.stringify({ type: answer.type, sdp: this.peers[sid]?.localDescription })),
           roomId: this.roomId,
           from: this.userId,
           to: sid
@@ -284,7 +284,7 @@ export class VideoChannelService extends EventTarget {
     console.log(`Adding pending candidate ${sid}`)
     this.pendingCandidates[sid].push(candidate);
   }
-// =============================== P U B L I C  F U N C T I O N ========================================================
+  // =============================== P U B L I C  F U N C T I O N ========================================================
   /**
    * Thiết lập local stream cho user hiện tại và add vào tất cả peer connection đã có
    * @param stream - MediaStream local
@@ -359,7 +359,7 @@ export class VideoChannelService extends EventTarget {
    */
   public addOnRemoteStreamListener(listener: (stream: MediaStream, from: string) => void) {
     this.addEventListener('remoteStream', (e: Event) => {
-      const customEvent = e as CustomEvent<{stream: MediaStream; from: string}>;
+      const customEvent = e as CustomEvent<{ stream: MediaStream; from: string }>;
       listener(customEvent.detail.stream, customEvent.detail.from);
     });
   }
@@ -367,9 +367,11 @@ export class VideoChannelService extends EventTarget {
   /**
    * getUserMedia and return to HTML control callback
    * @param callback process stream
+   * @param videoEnabled
+   * @param audioEnabled
    */
-  public async addOnLocalStream(callback: any) {
-    const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+  public async addOnLocalStream(callback: any, videoEnabled: boolean, audioEnabled: boolean) {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: videoEnabled, audio: audioEnabled });
     callback(stream);
     this.localStream = stream;
   }
