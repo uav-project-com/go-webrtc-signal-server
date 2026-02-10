@@ -1,5 +1,6 @@
 # Hướng dẫn sử dụng Raspberry Pi
-
+![img.png](img.png)
+![img_1.png](img_1.png)
 ## Boot Raspberry Pi
 ```bash
 ssh  assmin@192.168.1.15
