@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Broadcast IP
+After=NetworkManager-wait-online.service
+Wants=NetworkManager-wait-online.service
+
+[Service]
+ExecStart=/usr/local/bin/wifi_auto_discovery_bcast.sh
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
