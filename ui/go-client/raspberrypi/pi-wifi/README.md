@@ -1,3 +1,11 @@
+## Connect wifi
+- trong os mới, pi5 phải tự connect wifi từ trước thì nó mới nhớ, chứ không dùng đuược file boot config wifi nữa:
+```bash
+nmcli dev wifi connect "SSID" password "PASSWORD"
+sudo nmcli connection modify "SSID" connection.autoconnect yes
+```
+
+
 À cái này làm được khá gọn và khá “pro” luôn 😄. Ý bạn là:
 
 👉 Pi5 sau khi **kết nối mạng thành công**
