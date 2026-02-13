@@ -68,7 +68,15 @@ while True:
 
         log(f"Received: {line}")
 
-        payload = json.loads(line)
+        start = line.find("{")
+
+        if start == -1:
+          log("No JSON found")
+          continue
+
+        clean_line = line[start:]
+
+        payload = json.loads(clean_line)
 
         ssid = payload.get("ssid")
         password = payload.get("password")

@@ -41,7 +41,13 @@ JSON="{\"ssid\":\"$SSID\",\"password\":\"$PASSWORD\"}"
 echo "Sending WiFi config...$JSON"
 echo "$JSON" > $RFCOMM_DEV
 
-sleep 1
+for i in {1..100}; do
+  bar=$(printf "%-${i}s" "#" | tr ' ' '#')
+  printf "\r[%-100s] %d%%" "$bar" "$i"
+  sleep 0.2
+done
+echo
+
 
 # ---- Disconnect ----
 echo "Disconnecting Bluetooth..."
