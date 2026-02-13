@@ -1,0 +1,10 @@
+[Unit]
+Description=Bluetooth WiFi Provision
+After=bluetooth.service
+
+[Service]
+ExecStart=/usr/bin/python3 /home/assmin/wifi_receiver.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

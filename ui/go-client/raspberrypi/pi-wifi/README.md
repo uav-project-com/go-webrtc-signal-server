@@ -3,6 +3,7 @@
 ```bash
 nmcli dev wifi connect "SSID" password "PASSWORD"
 sudo nmcli connection modify "SSID" connection.autoconnect yes
+nmcli connection show --active
 ```
 
 

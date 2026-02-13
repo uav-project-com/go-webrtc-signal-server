@@ -1,0 +1,13 @@
+[Unit]
+Description=Auto enable Bluetooth discoverable & pairable
+After=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bluetoothctl power on
+ExecStart=/usr/bin/bluetoothctl discoverable on
+ExecStart=/usr/bin/bluetoothctl pairable on
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
