@@ -23,6 +23,7 @@ DiscoverableTimeout = 900
 PairableTimeout = 900
 ```
   - thêm `bt-auto-enable.service` và enable nó
+  - `sudo sdptool add SP`
   - Sau đó: reboot
 
 

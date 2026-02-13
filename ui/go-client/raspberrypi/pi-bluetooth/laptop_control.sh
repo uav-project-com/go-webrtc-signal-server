@@ -7,8 +7,8 @@ RFCOMM_DEV="/dev/rfcomm0"
 echo "=== Bluetooth WiFi Provision ==="
 
 # ---- Input WiFi ----
-read -p "Enter WiFi SSID: " SSID
-read -s -p "Enter WiFi Password: " PASSWORD
+IFS= read -r -p "Enter WiFi SSID: " SSID
+IFS= read -s -p "Enter WiFi Password: " PASSWORD
 echo ""
 
 # ---- Connect Bluetooth ----
@@ -38,7 +38,7 @@ echo "Connected!"
 # ---- Send JSON ----
 JSON="{\"ssid\":\"$SSID\",\"password\":\"$PASSWORD\"}"
 
-echo "Sending WiFi config..."
+echo "Sending WiFi config...$JSON"
 echo "$JSON" > $RFCOMM_DEV
 
 sleep 1
