@@ -371,6 +371,12 @@ export class VideoChannelService extends EventTarget {
    * @param audioEnabled
    */
   public async addOnLocalStream(callback: any, videoEnabled: boolean, audioEnabled: boolean) {
+    if (!videoEnabled && !audioEnabled) {
+      const emptyStream = new MediaStream();
+      callback(emptyStream);
+      this.localStream = emptyStream;
+      return;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ video: videoEnabled, audio: audioEnabled });
     callback(stream);
     this.localStream = stream;

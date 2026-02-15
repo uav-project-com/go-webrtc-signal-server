@@ -327,6 +327,7 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 	})
 
 	pc.OnConnectionStateChange(func(state pionwebrtc.PeerConnectionState) {
+		// TODO: connectionState: closed => chưa tắt cam đi => tốn điện
 		log.Printf("connectionState: %s", state.String())
 		if state == pionwebrtc.PeerConnectionStateConnected {
 			c.getAndClearPendingCandidates(sid)

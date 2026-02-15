@@ -1,0 +1,56 @@
+<div class="meeting-container uav-container">
+    <!-- Top Bar (Simplified/Hidden) -->
+    <!-- <div class="top-bar">
+    <button class="back-btn" (click)="goHome()" >←</button>
+    <div class="meeting-id">{{sid}} joined room: {{roomId}}</div>
+    <button class="speaker-btn">🔊</button>
+  </div> -->
+
+    <!-- Video Room -->
+    <div class="video-room">
+        <!-- Participant Grid - This is where remote videos appear via VideoElementUtil -->
+        <div class="participant-grid"></div>
+
+        <!-- Mini Self Video - HIDDEN for FPV viewer -->
+        <div class="self-video" style="display: none;">
+            <video #localVideo autoplay muted playsinline></video>
+        </div>
+    </div>
+
+    <!-- Overlay Controls (FPV Style) -->
+    <div class="controls-overlay">
+        <!-- Hidden toggle (auto-started), but kept for debug if needed, or we can remove it if fully auto -->
+        <button class="control-btn" (click)="toggleCamera()" style="opacity: 0.5;">
+            🎥 Toggle
+        </button>
+
+        <button class="control-btn restart-btn" (click)="restart()">
+            🔄 Restart
+        </button>
+
+        <button class="control-btn power-btn" (click)="powerOff()">
+            ⏻ Power Off
+        </button>
+
+        <button class="control-btn menu-btn" (click)="openMoreOptions()">
+            ⋮
+        </button>
+
+        <!-- Hidden required buttons for VideoElementUtil -->
+        <div style="display: none;">
+            <button class="toggle-mic-btn"></button>
+            <button class="hangup"></button>
+        </div>
+    </div>
+
+    <!-- Toast (Keep for notifications) -->
+    <div *ngIf="showToast" class="toast-container">
+        <div class="toast-content">
+            <p>{{ toastMessage }}</p>
+            <div class="toast-buttons">
+                <button (click)="onToastYes()">✅ Yes</button>
+                <button (click)="onToastNo()">❌ No</button>
+            </div>
+        </div>
+    </div>
+</div>
