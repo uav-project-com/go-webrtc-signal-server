@@ -33,6 +33,7 @@ export class VideoElementUtil {
         // Append video to tile, tile to container
         tileDiv.appendChild(videoEl)
         container.appendChild(tileDiv)
+        VideoElementUtil.attachFPSMeter(videoEl, tileDiv)
       }
     }
     if (videoEl) {
@@ -119,6 +120,9 @@ export class VideoElementUtil {
     });
     await VideoElementUtil.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
       localVideo.srcObject = stream; // add local media to html element
+      if (localVideo.parentElement) {
+        VideoElementUtil.attachFPSMeter(localVideo, localVideo.parentElement)
+      }
     }, videoEnabled, audioEnabled)
     VideoElementUtil.addToggleMicEvent()
     VideoElementUtil.addHangUpEvent()
@@ -138,6 +142,7 @@ export class VideoElementUtil {
         const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
         if (videoEl && listRemoteStream[user] && videoEl.srcObject !== listRemoteStream[user]) {
           videoEl.srcObject = listRemoteStream[user];
+          VideoElementUtil.attachFPSMeter(videoEl, videoEl.parentElement as HTMLElement)
         }
       });
     });
@@ -145,5 +150,64 @@ export class VideoElementUtil {
       childList: true,
       subtree: true
     });
+  }
+
+  /**
+   * Attach a simple FPS meter to the video element.
+   * This uses requestVideoFrameCallback if available for accurate presentation FPS.
+   */
+  private static attachFPSMeter(video: HTMLVideoElement, container: HTMLElement) {
+    if (!video || !container) return
+    if (container.querySelector('.fps-meter')) return // already attached
+
+    const fpsDiv = document.createElement('div')
+    fpsDiv.className = 'fps-meter'
+    fpsDiv.style.position = 'absolute'
+    fpsDiv.style.top = '5px'
+    fpsDiv.style.left = '5px'
+    fpsDiv.style.background = 'rgba(0, 0, 0, 0.5)'
+    fpsDiv.style.color = '#0f0' // Green text
+    fpsDiv.style.padding = '2px 5px'
+    fpsDiv.style.borderRadius = '4px'
+    fpsDiv.style.fontSize = '12px'
+    fpsDiv.style.fontFamily = 'monospace'
+    fpsDiv.style.zIndex = '10'
+    fpsDiv.style.pointerEvents = 'none'
+    fpsDiv.innerText = 'FPS: --'
+
+    // Ensure container is relative so absolute positioning works
+    const style = window.getComputedStyle(container)
+    if (style.position === 'static') {
+      container.style.position = 'relative'
+    }
+
+    container.appendChild(fpsDiv)
+
+    let lastTime = performance.now()
+    let frameCount = 0
+
+    const onFrame = (now: number, metadata: any) => {
+      frameCount++
+      const elapsed = now - lastTime
+      if (elapsed >= 1000) {
+        const fps = Math.round((frameCount * 1000) / elapsed)
+        fpsDiv.innerText = `FPS: ${fps} (${video.videoWidth}x${video.videoHeight})`
+        frameCount = 0
+        lastTime = now
+      }
+
+      if ('requestVideoFrameCallback' in video) {
+        (video as any).requestVideoFrameCallback(onFrame)
+      } else {
+        // Fallback if not supported (less accurate but something)
+        requestAnimationFrame((t) => onFrame(t, null))
+      }
+    }
+
+    if ('requestVideoFrameCallback' in video) {
+      (video as any).requestVideoFrameCallback(onFrame)
+    } else {
+      requestAnimationFrame((t) => onFrame(t, null))
+    }
   }
 }
