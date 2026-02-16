@@ -1,6 +1,7 @@
 package webrtc
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -8,6 +9,8 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 )
 
 // CameraSettings lưu trữ trạng thái hiện tại của camera
@@ -30,6 +33,7 @@ type PiCameraManager struct {
 
 	// udpReader reads the RTP stream from the local UDP socket
 	udpReader *UDPReader
+	exitChan  chan error
 }
 
 // Check if PiCameraManager implements ICameraManager
@@ -96,7 +100,17 @@ func (m *PiCameraManager) Start() error {
 	}
 
 	// Kill any existing gstreamer processes (optional but safer)
+	log.Println("Camera Manager: Force cleaning any existing gst-launch processes...")
 	_ = exec.Command("pkill", "-f", "gst-launch-1.0").Run()
+
+	// Smart wait: Poll pgrep until process is gone (max 2s)
+	for i := 0; i < 20; i++ {
+		if err := exec.Command("pgrep", "-f", "gst-launch-1.0").Run(); err != nil {
+			// pgrep returns exit code 1 if no process found -> Success!
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 
 	return m.startProcess()
 }
@@ -130,11 +144,28 @@ func (m *PiCameraManager) startProcess() error {
 	m.cmd = exec.Command("gst-launch-1.0", args...)
 	m.cmd.Stderr = os.Stderr
 
+	// Create a new process group to kill all children later
+	m.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
 	if err := m.cmd.Start(); err != nil {
 		return convertGstError(err)
 	}
 
+	log.Printf("Camera Manager: GStreamer PID: %d", m.cmd.Process.Pid)
 	log.Printf("Camera Manager: Started GStreamer pipeline for Camera %d (RTP Mode)", m.settings.CameraID)
+
+	// Monitor exit
+	m.exitChan = make(chan error, 1)
+	go func() {
+		state, err := m.cmd.Process.Wait()
+		if err != nil {
+			log.Printf("Camera Manager: Process.Wait() return error: %v", err)
+			m.exitChan <- err
+		} else {
+			log.Printf("Camera Manager: Process exited. Success: %v, Code: %d", state.Success(), state.ExitCode())
+			m.exitChan <- nil
+		}
+	}()
 	return nil
 }
 
@@ -233,10 +264,45 @@ func (m *PiCameraManager) Stop() {
 		m.udpReader = nil
 	}
 
+	var pid int
 	if m.cmd != nil && m.cmd.Process != nil {
-		_ = m.cmd.Process.Kill()
+		pid = m.cmd.Process.Pid
+		// Attempt graceful shutdown with SIGTERM
+		_ = syscall.Kill(-pid, syscall.SIGTERM)
+
+		// Wait for exit or timeout
+		select {
+		case err := <-m.exitChan:
+			log.Printf("Process exited gracefully: %v", err)
+		case <-time.After(2000 * time.Millisecond):
+			// Timeout, force kill
+			log.Printf("Camera Manager: SIGTERM timeout, forcing SIGKILL")
+			_ = syscall.Kill(-pid, syscall.SIGKILL)
+
+			// Wait again with short timeout to ensure reaping
+			select {
+			case err := <-m.exitChan:
+				log.Printf("Process killed: %v", err)
+			case <-time.After(1000 * time.Millisecond):
+				log.Println("Camera Manager: Process unresponsive to SIGKILL (Zombie?), abandoning.")
+			}
+		}
+	} else {
+		log.Println("Camera Manager: Stop() called but cmd/Process is nil. Nothing to stop.")
 	}
 	m.cmd = nil
+	// Smart wait: Verify process is truly gone from OS process table
+	if pid > 0 {
+		for i := 0; i < 20; i++ {
+			// Sending signal 0 checks if process exists
+			if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+				// ESRCH = No such process. Success!
+				log.Printf("Camera Manager: Process %d confirmed gone.", pid)
+				break
+			}
+			time.Sleep(10 * time.Millisecond) // Poll fast
+		}
+	}
 }
 
 func (m *PiCameraManager) IsRTP() bool {

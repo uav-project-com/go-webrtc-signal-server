@@ -42,15 +42,4 @@
             <button class="hangup"></button>
         </div>
     </div>
-
-    <!-- Toast (Keep for notifications) -->
-    <div *ngIf="showToast" class="toast-container">
-        <div class="toast-content">
-            <p>{{ toastMessage }}</p>
-            <div class="toast-buttons">
-                <button (click)="onToastYes()">✅ Yes</button>
-                <button (click)="onToastNo()">❌ No</button>
-            </div>
-        </div>
-    </div>
 </div>

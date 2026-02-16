@@ -2,62 +2,63 @@
 package api
 
 import (
-  "encoding/json"
-  "github.com/gin-gonic/gin"
-  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
-  "github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
-  "log"
+	"encoding/json"
+	"log"
+
+	"github.com/gin-gonic/gin"
+	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/service"
+	"github.com/uav-project-com/go-webrtc-signal-server/go-rtc-client/webrtc"
 )
 
 type uavAPI struct {
 	Api
-  databaseSvc  service.DatabaseProviderService
-  socketSvc    service.SocketService
-  userSvc      service.UserService
-  dataChannel  *webrtc.DataChannelClient
-  videoChannel *webrtc.VideoChannelClient
-  videoEnabled bool
-  audioEnabled bool
-  channelInfo  *service.ChannelInfo
+	databaseSvc  service.DatabaseProviderService
+	socketSvc    service.SocketService
+	userSvc      service.UserService
+	dataChannel  *webrtc.DataChannelClient
+	videoChannel *webrtc.VideoChannelClient
+	videoEnabled bool
+	audioEnabled bool
+	channelInfo  *service.ChannelInfo
 }
 
 func (a *uavAPI) UavCommandHandler(cmd string) error {
-  // 1. Thử parse lệnh JSON (Từ Angular DataChannel) TODO: chưa test....
-  var data map[string]interface{}
-  if err := json.Unmarshal([]byte(cmd), &data); err == nil {
-    // Xử lý lệnh điều khiển Camera chuyên sâu
-    if action, ok := data["action"].(string); ok && action == ActionCamera {
-      camCmd, _ := data["cmd"].(string)
-      val, _ := data["val"].(float64)
-      camManager := webrtc.GetCameraManager()
+	// 1. Thử parse lệnh JSON (Từ Angular DataChannel)
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(cmd), &data); err == nil {
+		// Xử lý lệnh điều khiển Camera chuyên sâu
+		if action, ok := data["action"].(string); ok && action == ActionCamera {
+			camCmd, _ := data["cmd"].(string)
+			val, _ := data["val"].(float64)
+			camManager := webrtc.GetCameraManager()
 
-      log.Printf("Camera Control: Lệnh %s với giá trị %v", camCmd, val)
-      switch camCmd {
-      case CmdCameraZoom:
-        camManager.SetZoom(val)
-      case CmdCameraFocus:
-        camManager.SetFocus(int(val))
-      case CmdCameraSwitch:
-        camManager.SwitchCamera(int(val))
-      case CmdCameraReset:
-        err := camManager.Restart()
-        if err != nil {
-          return err
-        }
-      case CmdCameraISO:
-        camManager.SetISO(int(val))
-      }
-      return nil
-    }
+			log.Printf("Camera Control: Lệnh %s với giá trị %v", camCmd, val)
+			switch camCmd {
+			case CmdCameraZoom:
+				camManager.SetZoom(val)
+			case CmdCameraFocus:
+				camManager.SetFocus(int(val))
+			case CmdCameraSwitch:
+				camManager.SwitchCamera(int(val))
+			case CmdCameraReset:
+				err := camManager.Restart()
+				if err != nil {
+					return err
+				}
+			case CmdCameraISO:
+				camManager.SetISO(int(val))
+			}
+			return nil
+		}
 
-    // Xử lý signaling WebRTC (logic cũ)
-    var msg webrtc.SignalMsg
-    _ = json.Unmarshal([]byte(cmd), &msg)
+		// Xử lý signaling WebRTC (logic cũ)
+		var msg webrtc.SignalMsg
+		_ = json.Unmarshal([]byte(cmd), &msg)
 		isVideoSignal := (msg.Msg == webrtc.RequestJoinMediaChannel) ||
 			(msg.Channel != nil && *msg.Channel == webrtc.ChannelWebrtc)
 
 		if isVideoSignal {
-      log.Println("Nhận tín hiệu Video qua DataChannel. Đang chuyển tiếp...")
+			log.Println("Nhận tín hiệu Video qua DataChannel. Đang chuyển tiếp...")
 			if a.videoChannel == nil {
 				var errInit error
 				a.videoChannel, errInit = a.socketSvc.InitVideoChannel(a.channelInfo)
@@ -66,23 +67,23 @@ func (a *uavAPI) UavCommandHandler(cmd string) error {
 				}
 			}
 			a.videoChannel.HandleSignalMsg(msg)
-      if msg.Msg == webrtc.RequestJoinMediaChannel && !a.videoEnabled {
-        a.videoEnabled = true
-        a.videoChannel.ToggleLocalVideo(true)
+			if msg.Msg == webrtc.RequestJoinMediaChannel {
+				a.videoEnabled = true
+				a.videoChannel.ToggleLocalVideo(true)
 			}
 			return nil
 		}
 	}
 
-  // 2. Xử lý các lệnh văn bản thuần túy (Legacy) TODO: chưa test....
-  log.Printf("Xử lý lệnh văn bản: %s", cmd)
-  if cmd == CmdVideoToggle {
+	// 2. Xử lý các lệnh văn bản thuần túy (Legacy)
+	log.Printf("Xử lý lệnh văn bản: %s", cmd)
+	if cmd == CmdVideoToggle {
 		a.videoEnabled = !a.videoEnabled
-    if a.videoEnabled && a.videoChannel == nil {
-      var err error
-      a.videoChannel, err = a.socketSvc.InitVideoChannel(a.channelInfo)
-      if err != nil {
-        return err
+		if a.videoEnabled && a.videoChannel == nil {
+			var err error
+			a.videoChannel, err = a.socketSvc.InitVideoChannel(a.channelInfo)
+			if err != nil {
+				return err
 			}
 		}
 		if a.videoChannel != nil {
@@ -113,25 +114,25 @@ func (a *uavAPI) StartUavControlHandler(ctx *gin.Context) {
 		log.Printf("E2E test, master is %s", master)
 		isMaster = master == "true"
 	}
-  channelInfo := &service.ChannelInfo{
+	channelInfo := &service.ChannelInfo{
 		Sid:      &user.Username,
 		RoomId:   &webSocket.Config.Room,
 		IsMaster: &isMaster,
 		WsClient: webSocket.WsClient,
 	}
-  a.channelInfo = channelInfo
+	a.channelInfo = channelInfo
 	dataChannel, err := a.socketSvc.InitDataChannel(channelInfo)
 	if err != nil {
 		log.Fatal("InitDataChannel:", err)
 	}
 	// keep reference for command handler
 	a.dataChannel = dataChannel
-  log.Println("Registering OnMessage listener")
+	log.Println("Registering OnMessage listener")
 	dataChannel.AddOnMessageEventListener(func(message string) {
-    log.Printf("Callback triggered with message: %s", message)
-    err := a.UavCommandHandler(message)
-    if err != nil {
-      log.Println("UavCommandHandler:", err)
-    }
+		log.Printf("Callback triggered with message: %s", message)
+		err := a.UavCommandHandler(message)
+		if err != nil {
+			log.Println("UavCommandHandler:", err)
+		}
 	})
 }
