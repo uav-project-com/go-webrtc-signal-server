@@ -327,10 +327,15 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 	})
 
 	pc.OnConnectionStateChange(func(state pionwebrtc.PeerConnectionState) {
-		// TODO: connectionState: closed => chưa tắt cam đi => tốn điện
-		log.Printf("connectionState: %s", state.String())
+		log.Printf("connectionState for %s: %s", sid, state.String())
 		if state == pionwebrtc.PeerConnectionStateConnected {
 			c.getAndClearPendingCandidates(sid)
+		}
+		// Fix: Stop camera if peer disconnected
+		if state == pionwebrtc.PeerConnectionStateClosed ||
+			state == pionwebrtc.PeerConnectionStateDisconnected ||
+			state == pionwebrtc.PeerConnectionStateFailed {
+			c.checkAndStopCamera()
 		}
 	})
 
@@ -345,6 +350,25 @@ func (c *VideoChannelClient) createVideoPeerConnection(sid string, isCaller bool
 		}
 	}
 	return nil
+}
+
+// checkAndStopCamera iterates through peers and stops camera if no active connections remain
+func (c *VideoChannelClient) checkAndStopCamera() {
+	c.mu.Lock()
+	hasActivePeer := false
+	for _, pc := range c.peers {
+		state := pc.ConnectionState()
+		if state == pionwebrtc.PeerConnectionStateConnected || state == pionwebrtc.PeerConnectionStateConnecting {
+			hasActivePeer = true
+			break
+		}
+	}
+	c.mu.Unlock()
+
+	if !hasActivePeer {
+		log.Println("No active peers left. Stopping camera to save power.")
+		c.ToggleLocalVideo(false)
+	}
 }
 
 // Public Api ------------------------------------------------

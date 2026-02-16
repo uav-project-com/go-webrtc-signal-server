@@ -1,6 +1,5 @@
 import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HomeComponent } from '../home/home.component';
 import { DataChannelService, VideoChannelService, VideoElementUtil, } from 'webrtc-common';
@@ -10,7 +9,6 @@ import { environment } from '../../environments/environment';
   selector: 'app-call',
   templateUrl: './call-uav.component.html',
   imports: [
-    NgIf,
     FormsModule,
   ],
   styleUrls: ['./call-uav.component.scss'],
@@ -30,17 +28,9 @@ export class CallUavComponent implements OnInit, AfterViewInit {
 
   chatOpen = false;
   newMessage = '';
-  messages: { text: string; from: string }[] = [];
   dataChannelSvc: DataChannelService
   videoChannelSvc!: VideoChannelService;
   remoteStreams: { [userId: string]: MediaStream } = {};
-
-  //   Toast
-  showToast = false;
-  toastMessage = 'Do you want to continue?';
-
-  /* Toast dialog */
-  private toastYesCallback: (() => void) | null = null;
 
   ngOnInit(): void {
     this.roomId = '888-888-888'
@@ -82,13 +72,8 @@ export class CallUavComponent implements OnInit, AfterViewInit {
       )
       // Push message datachannel lên giao diện (UI controller)
       this.dataChannelSvc.addOnMessageEventListener((msg, sender) => {
-        this.messages.push({ text: msg, from: sender });
-        setTimeout(() => this.scrollToBottom(), 100);
+        console.log(`received: ${msg} from ${sender}`)
       });
-      // Set toast confirm when new user request join chat: (optional)
-      this.dataChannelSvc.setToastConfirmJoinRoomCallBack(
-        this.showConfirmToast.bind(this)
-      );
     }
   }
 
@@ -124,17 +109,16 @@ export class CallUavComponent implements OnInit, AfterViewInit {
   }
 
   // ----------------- Data Channel Chat -----------------------------------------------------------------------
+  // todo: does we need that func? because we just F5 to refresh connection
   toggleChat() {
     this.initDataChannel()
     this.chatOpen = !this.chatOpen;
   }
+  openMoreOptions() {}
 
   /**
    * Chat example via data-channel
    */
-  openChat() {
-    this.chatOpen = true;
-  }
 
   sendMessage() {
     if (!this.newMessage.trim()) return;
@@ -143,61 +127,18 @@ export class CallUavComponent implements OnInit, AfterViewInit {
     // this.sendToPeers(this.newMessage);
     this.dataChannelSvc.sendMsg(this.newMessage).then(
       _ => {
-        // Add local message
-        this.messages.push({ text: this.newMessage, from: 'me' });
-        this.newMessage = '';
-        setTimeout(() => this.scrollToBottom(), 100);
       }
     )
   }
 
-  clearChat() {
-    this.messages = [];
-  }
-
-  scrollToBottom() {
-    const el = document.querySelector('.chat-messages');
-    if (el) el.scrollTop = el.scrollHeight;
-  }
 
   // ----------------- UI & Toast ------------------------------------------------------------------------------
-
-  minimizeSelf() {
-    this.isMinimized = true;
-  }
-
-  restoreSelf() {
-    this.isMinimized = false;
-  }
-
-  openMoreOptions() {
-    alert('More options coming soon!');
-  }
-
   goHome() {
     window.location.href = '/'
   }
 
   // ----------------- Thuộc tính -------------------------
   // ...các thuộc tính class...
-  showConfirmToast(message: string, onYes: () => void) {
-    this.toastMessage = message;
-    this.toastYesCallback = onYes;
-    this.showToast = true;
-  }
-
-  onToastYes() {
-    this.showToast = false;
-    if (this.toastYesCallback) {
-      this.toastYesCallback();  // Gọi callback khi người dùng ấn Yes
-      this.toastYesCallback = null; // Xoá callback sau khi dùng
-    }
-  }
-
-  onToastNo() {
-    this.showToast = false;
-    this.toastYesCallback = null;
-  }
 
   restart() {
     window.location.reload();

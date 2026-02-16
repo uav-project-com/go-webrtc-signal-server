@@ -17,9 +17,6 @@ type LaptopCameraManager struct {
 	settings  CameraSettings
 	udpReader *UDPReader
 
-	pipeReader *io.PipeReader
-	pipeWriter *io.PipeWriter
-
 	// Reuse existing settings struct, or we can just ignore some fields
 }
 
@@ -27,10 +24,7 @@ type LaptopCameraManager struct {
 var _ ICameraManager = (*LaptopCameraManager)(nil)
 
 func NewLaptopCameraManager() *LaptopCameraManager {
-	pr, pw := io.Pipe()
 	return &LaptopCameraManager{
-		pipeReader: pr,
-		pipeWriter: pw,
 		settings: CameraSettings{
 			CameraID: 0,
 			Width:    1280,
