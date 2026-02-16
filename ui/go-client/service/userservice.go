@@ -11,17 +11,18 @@ import (
 )
 
 type UserService interface {
-  DatabaseProviderService
-  FindByUsername(ctx context.Context, username string) (*UserInfo, error)
-  ExtractToken(tokenRaw string) (*UserInfo, error)
+	DatabaseProviderService
+	FindByUsername(ctx context.Context, username string) (*UserInfo, error)
+	ExtractToken(tokenRaw string) (*UserInfo, error)
+	GetFirstUsername(ctx context.Context) (string, error)
 }
 
 type userService struct {
-  DatabaseProviderService
+	DatabaseProviderService
 }
 
 func NewUserService(svc DatabaseProviderService) UserService {
-  return &userService{DatabaseProviderService: svc}
+	return &userService{DatabaseProviderService: svc}
 }
 
 // UserInfo represents a record in the `user` table from the SQLite database.
@@ -34,13 +35,13 @@ type UserInfo struct {
 // FindByUsername returns the user record for the given username.
 // It uses the DatabaseProviderService's shared *sql.DB and accepts a context for cancellation.
 func (s *userService) FindByUsername(ctx context.Context, username string) (*UserInfo, error) {
-  db := s.Connection()
-  row := db.QueryRowContext(ctx,
+	db := s.Connection()
+	row := db.QueryRowContext(ctx,
 		"SELECT id, username, password FROM user WHERE username = ?",
 		username,
 	)
 
-  var user UserInfo
+	var user UserInfo
 	if err := row.Scan(&user.ID, &user.Username, &user.Password); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -49,6 +50,15 @@ func (s *userService) FindByUsername(ctx context.Context, username string) (*Use
 	}
 
 	return &user, nil
+}
+
+func (s *userService) GetFirstUsername(ctx context.Context) (string, error) {
+	row := s.Connection().QueryRowContext(ctx, "SELECT username FROM user LIMIT 1")
+	var username string
+	if err := row.Scan(&username); err != nil {
+		return "", err
+	}
+	return username, nil
 }
 
 func (s *userService) ExtractToken(tokenRaw string) (*UserInfo, error) {
@@ -82,7 +92,7 @@ func (s *userService) ExtractToken(tokenRaw string) (*UserInfo, error) {
 			if !ok {
 				return nil, errors.New("invalid sub claim type")
 			}
-      var user = UserInfo{
+			var user = UserInfo{
 				ID:       id,
 				Username: username,
 			}

@@ -11,7 +11,7 @@ import (
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile) // Enable file:line logging
-	defer func() { // keep server live when panic error occurred
+	defer func() {                               // keep server live when panic error occurred
 		if err := recover(); err != nil {
 			log.Printf("Recovered from panic: %v", err)
 		}
@@ -28,6 +28,8 @@ func main() {
 	configService := service.NewConfigService(dbService)
 	socketService := service.NewSocketService(dbService, configService)
 	startHandler := api.NewUavAPI(userService, socketService, userService)
+	// Auto-start UAV client mode
+	startHandler.AutoStart()
 
 	router := configRoutes(userService, startHandler)
 	err = router.Run(":3001")
