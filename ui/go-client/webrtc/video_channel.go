@@ -501,9 +501,9 @@ func (c *VideoChannelClient) ToggleLocalVideo(enable bool) {
 func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebrtc.TrackLocal) {
 	env := os.Getenv("APP_ENV")
 
-	// Handle RTP Track (Production Laptop)
+	// Handle RTP Track (Production Laptop / Pi UDP)
 	if rtpTrack, ok := track.(*pionwebrtc.TrackLocalStaticRTP); ok {
-		log.Printf("Streaming Mode: RTP Passthrough (GStreamer -> Pion)")
+		log.Printf("Streaming Mode: RTP/UDP Passthrough")
 
 		camManager := GetCameraManager()
 		if err := camManager.Start(); err != nil {
@@ -513,6 +513,13 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 		defer camManager.Stop()
 
 		reader := camManager.GetReader()
+
+		// rpicam-vid over UDP outputs raw H.264 NAL Units, not actual RTP packets!
+		// But Pion TrackLocalStaticRTP expects RTP packets if written via Write().
+		// However, we can write raw NALs using Write(nal) if we wrap it, OR,
+		// standard GStreamer outputs real RTP.
+		// To fix: If it's Pi UDP, we must act as a Sample track, not RTP track!
+
 		buf := make([]byte, 15000) // Jumbo Frame Safe
 
 		for {
@@ -601,7 +608,7 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 			file.Close()
 		}
 	} else {
-		log.Printf("Chế độ PRODUCTION: Đang stream video từ CameraManager...")
+		log.Printf("Chế độ PRODUCTION: Đang stream video từ CameraManager (RAW Pipe)...")
 		camManager := GetCameraManager()
 		if err := camManager.Start(); err != nil {
 			log.Printf("Lỗi khởi động CameraManager: %v", err)
@@ -609,12 +616,6 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 		}
 
 		h264 := NewH264Reader(camManager.GetReader())
-
-		// Target 30 FPS
-		frameDuration := 33 * time.Millisecond
-
-		// Buffer for NALs of the current frame
-		var pendingNALs [][]byte
 
 		for {
 			select {
@@ -634,65 +635,15 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 				continue
 			}
 
-			// Parse NAL Unit Type
-			nalType := nal[0] & 0x1F
-
-			// If AUD (Access Unit Delimiter) found, it means a NEW frame is starting.
-			// We flush the PREVIOUS frame's NALs.
-			if nalType == 9 && len(pendingNALs) > 0 {
-				accumulatedBytes := 0
-
-				// Flush previous frame
-				for i, pNAL := range pendingNALs {
-					duration := time.Duration(0)
-					// Only the last NAL of the frame gets the duration
-					if i == len(pendingNALs)-1 {
-						duration = frameDuration
-					}
-
-					if err := sampleTrack.WriteSample(media.Sample{Data: pNAL, Duration: duration}); err != nil {
-						log.Printf("Lỗi ghi sample: %v", err)
-						return
-					}
-
-					// Smart Pacing:
-					// Sleep 1ms after sending 8KB.
-					// This prevents UDP buffer overflow for multi-slice frames.
-					accumulatedBytes += len(pNAL)
-					if accumulatedBytes > 8192 {
-						time.Sleep(1 * time.Millisecond)
-						accumulatedBytes = 0
-					}
-				}
-				// Clear buffer
-				pendingNALs = pendingNALs[:0]
-			}
-
-			// Add current NAL to buffer
-			pendingNALs = append(pendingNALs, nal)
-
-			// Safety Flush
-			if len(pendingNALs) > 100 {
-				log.Println("Warning: Buffer full (>100 NALs) without AUD. Forcing flush!")
-				accumulatedBytes := 0
-				for i, pNAL := range pendingNALs {
-					duration := time.Duration(0)
-					if i == len(pendingNALs)-1 {
-						duration = frameDuration
-					}
-
-					if err := sampleTrack.WriteSample(media.Sample{Data: pNAL, Duration: duration}); err != nil {
-						log.Printf("Error writing sample: %v", err)
-						return
-					}
-
-					accumulatedBytes += len(pNAL)
-					if accumulatedBytes > 8192 {
-						time.Sleep(1 * time.Millisecond)
-						accumulatedBytes = 0
-					}
-				}
-				pendingNALs = pendingNALs[:0]
+			// Pion's sample builder can accept NAL units directly.
+			// We don't need to manually buffer them until an AUD is found.
+			// Just stream them out as fast as they come from the hardware pipe.
+			if err := sampleTrack.WriteSample(media.Sample{
+				Data:     nal,
+				Duration: time.Millisecond, // Let Pion handle the physical pacing based on arrival time
+			}); err != nil {
+				log.Printf("Lỗi ghi sample: %v", err)
+				return
 			}
 		}
 	}

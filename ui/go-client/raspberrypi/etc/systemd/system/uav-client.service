@@ -1,0 +1,15 @@
+[Unit]
+Description=UAV WebRTC Client Service
+After=network.target
+
+[Service]
+Type=simple
+User=assmin
+WorkingDirectory=/home/assmin
+ExecStart=/home/assmin/uav-core
+Restart=always
+RestartSec=5
+Environment=APP_ENV=prod
+
+[Install]
+WantedBy=multi-user.target

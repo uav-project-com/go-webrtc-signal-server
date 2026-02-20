@@ -59,13 +59,29 @@ func GetCameraManager() ICameraManager {
 			return
 		}
 
+		if os.Getenv("RPICAM") == "true" {
+			log.Println("Using PiCameraManagerRpi (rpicam-vid)")
+			instance = &PiCameraManagerRpi{
+				settings: CameraSettings{
+					CameraID: 0,
+					Width:    1280,
+					Height:   720,
+					FPS:      60,
+					Focus:    500,
+					ISO:      100,
+					Zoom:     1.0,
+				},
+			}
+			return
+		}
+
 		log.Println("Using PiCameraManager (GStreamer)")
 		instance = &PiCameraManager{
 			settings: CameraSettings{
 				CameraID: 0,
 				Width:    1280,
 				Height:   720,
-				FPS:      30,
+				FPS:      30, // GStreamer usually drops heavily at 60fps
 				Focus:    500,
 				ISO:      100,
 				Zoom:     1.0,

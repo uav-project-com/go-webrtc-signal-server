@@ -21,44 +21,37 @@ func NewH264Reader(r io.Reader) *H264Reader {
 
 // NextNAL reads the next NAL unit from the stream
 func (h *H264Reader) NextNAL() ([]byte, error) {
-	data := h.leftover
-	// Read more data until we have a start code or EOF
 	for {
-		// Search for start code in data
-		startPayload, nextStart, _ := findNAL(data)
+		// Search for start code in the accumulated leftover buffer
+		startPayload, nextStart, _ := findNAL(h.leftover)
 
 		if startPayload >= 0 && nextStart >= 0 {
-			// Found a complete NAL
-			// Return NAL WITHOUT start code (Pion Packetizer expects Raw NAL)
-			nal := data[startPayload:nextStart]
-			h.leftover = data[nextStart:]
+			// Found a complete NAL unit
+			nal := h.leftover[startPayload:nextStart]
+			// Keep the rest of the buffer from the start of the *next* NAL
+			h.leftover = h.leftover[nextStart:]
 			return nal, nil
 		}
 
-		// Not found, read more
+		// Not enough data for a full NAL, read more from the underlying stream
 		n, err := h.reader.Read(h.buffer)
 		if n > 0 {
-			data = append(data, h.buffer[:n]...)
+			h.leftover = append(h.leftover, h.buffer[:n]...)
 		}
+
 		if err != nil {
 			if err == io.EOF {
-				if len(data) > 0 {
-					// Handle last NAL
+				if len(h.leftover) > 0 {
+					startPayload, _, _ := findNAL(h.leftover)
 					if startPayload >= 0 {
+						nal := h.leftover[startPayload:]
 						h.leftover = nil
-						// Return remaining data
-						return data[startPayload:], nil
+						return nal, nil
 					}
-					return nil, io.EOF
 				}
-				return nil, io.EOF
 			}
 			return nil, err
 		}
-
-		// Optimization: if we have a lot of data and no NAL end found yet?
-		// We just keep appending.
-		h.leftover = data // save state for next iteration (though 'data' variable holds it)
 	}
 }
 
@@ -75,11 +68,6 @@ func findNAL(data []byte) (int, int, int) {
 	startCodeLen := 0
 
 	// Find first start code
-	// We scan only the beginning if we assume 'data' starts with a start code?
-	// But 'data' comes from h.leftover, which we set to `data[nextStart:]`.
-	// So data SHOULD start with a start code (00 00 ...).
-	// Let's verify and find it.
-
 	for i := 0; i < len(data)-2; i++ {
 		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
 			start = i
@@ -102,8 +90,6 @@ func findNAL(data []byte) (int, int, int) {
 	nextStart := -1
 	for i := startPayload; i < len(data)-2; i++ {
 		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
-			// Found next start code sequence
-			// Check for 4-byte start code prefix
 			if i > 0 && data[i-1] == 0 {
 				nextStart = i - 1
 			} else {
