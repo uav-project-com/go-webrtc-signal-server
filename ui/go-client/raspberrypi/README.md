@@ -31,7 +31,7 @@ sudo apt install -y gstreamer1.0-tools \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
   gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
   gstreamer1.0-libcamera libcamera-apps
-
+```
 ## Camera Implementation (camera_manager.go)
 File `go-client/webrtc/camera_manager.go` tự động phát hiện môi trường chạy:
 1.  **Laptop (Ubuntu/Arch/Fedora):** Sử dụng `ffmpeg` qua `v4l2src` (giả lập).
@@ -59,3 +59,14 @@ Các tham số quan trọng:
 3.  `video_channel.go` mở cổng UDP 5600 để lắng nghe.
 4.  Do `IsRTP()` trả về `true`, `video_channel.go` nhận biết đây là luồng RTP và chuyển tiếp thẳng (`Keep-As-Is`) vào WebRTC Track (`TrackLocalStaticRTP`) mà không cần phân tích NAL Unit thủ công.
 5.  WebRTC Agent gửi dữ liệu này qua mạng tới Browser.
+
+### Debug turning video
+
+```bash
+# Pi5:
+rpicam-vid -t 0 --inline --framerate 60 --codec h264 --tuning-file /usr/share/libcamera/ipa/rpi/pisp/pi5_imx219_160d.json -l -o tcp://0.0.0.0:5600
+
+# laptop:
+ffplay tcp://192.168.1.24:5600 -framerate 60 -analyzeduration 1 -fflags nobuffer
+
+```

@@ -69,6 +69,7 @@ func (m *PiCameraManagerRpi) startProcess() error {
 		"--width", strconv.Itoa(m.settings.Width),
 		"--height", strconv.Itoa(m.settings.Height),
 		"--framerate", strconv.Itoa(m.settings.FPS),
+		"--tuning-file", "/usr/share/libcamera/ipa/rpi/pisp/pi5_imx219_160d.json",
 		"--codec", "h264",
 		"--profile", "baseline",
 		"--level", "4.2",
