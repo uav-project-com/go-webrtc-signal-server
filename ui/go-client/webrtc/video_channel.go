@@ -614,6 +614,7 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 			log.Printf("Lỗi khởi động CameraManager: %v", err)
 			return
 		}
+		defer camManager.Stop()
 
 		h264 := NewH264Reader(camManager.GetReader())
 
