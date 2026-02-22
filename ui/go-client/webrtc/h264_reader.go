@@ -19,16 +19,16 @@ func NewH264Reader(r io.Reader) *H264Reader {
 	}
 }
 
-// NextNAL reads the next NAL unit from the stream
+// NextNAL reads the next NAL unit from the stream, *without* its start code.
 func (h *H264Reader) NextNAL() ([]byte, error) {
 	for {
 		// Search for start code in the accumulated leftover buffer
 		startPayload, nextStart, _ := findNAL(h.leftover)
 
 		if startPayload >= 0 && nextStart >= 0 {
-			// Found a complete NAL unit
+			// Found a complete NAL unit, excluding the start code
 			nal := h.leftover[startPayload:nextStart]
-			// Keep the rest of the buffer from the start of the *next* NAL
+			// Keep the rest of the buffer from the start of the *next* start code
 			h.leftover = h.leftover[nextStart:]
 			return nal, nil
 		}
@@ -44,6 +44,7 @@ func (h *H264Reader) NextNAL() ([]byte, error) {
 				if len(h.leftover) > 0 {
 					startPayload, _, _ := findNAL(h.leftover)
 					if startPayload >= 0 {
+						// Found the final NAL unit, excluding the start code
 						nal := h.leftover[startPayload:]
 						h.leftover = nil
 						return nal, nil

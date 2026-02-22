@@ -617,6 +617,12 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 
 		h264 := NewH264Reader(camManager.GetReader())
 
+		// Target 60 FPS pacing duration
+		frameDuration := 16 * time.Millisecond
+
+		// Buffer for NALs of the current frame
+		var pendingNALs [][]byte
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -635,15 +641,71 @@ func (c *VideoChannelClient) streamVideoLoop(ctx context.Context, track pionwebr
 				continue
 			}
 
-			// Pion's sample builder can accept NAL units directly.
-			// We don't need to manually buffer them until an AUD is found.
-			// Just stream them out as fast as they come from the hardware pipe.
-			if err := sampleTrack.WriteSample(media.Sample{
-				Data:     nal,
-				Duration: time.Millisecond, // Let Pion handle the physical pacing based on arrival time
-			}); err != nil {
-				log.Printf("Lỗi ghi sample: %v", err)
-				return
+			// Since NextNAL now strips start codes, nal[0] IS the NAL Type byte.
+			nalType := nal[0] & 0x1F
+
+			// Add current NAL to buffer
+			pendingNALs = append(pendingNALs, nal)
+
+			// Slice NAL units (1 = Non-IDR, 5 = IDR) signify the end of the frame encoding process
+			if nalType == 1 || nalType == 5 {
+				accumulatedBytes := 0
+
+				// Flush previous frame
+				for i, pNAL := range pendingNALs {
+					duration := time.Duration(0)
+					if i == len(pendingNALs)-1 {
+						duration = frameDuration
+					}
+
+					if err := sampleTrack.WriteSample(media.Sample{
+						Data:     pNAL,
+						Duration: duration,
+					}); err != nil {
+						log.Printf("Lỗi ghi sample: %v", err)
+						return
+					}
+
+					// Smart Pacing:
+					// Sleep 1ms after sending 8KB.
+					// This prevents UDP buffer overflow for multi-slice frames while keeping 60fps throughput.
+					accumulatedBytes += len(pNAL)
+					if accumulatedBytes > 8192 {
+						time.Sleep(1 * time.Millisecond)
+						accumulatedBytes = 0
+					}
+				}
+
+				// Clear buffer while keeping capacity
+				for i := range pendingNALs {
+					pendingNALs[i] = nil
+				}
+				pendingNALs = pendingNALs[:0]
+			}
+
+			// Safety Flush (If framing breaks and buffer grows too large, force flush)
+			if len(pendingNALs) > 100 {
+				log.Println("Warning: Buffer full (>100 NALs). Forcing safety flush!")
+				accumulatedBytes := 0
+				for i, pNAL := range pendingNALs {
+					duration := time.Duration(0)
+					if i == len(pendingNALs)-1 {
+						duration = frameDuration
+					}
+					if err := sampleTrack.WriteSample(media.Sample{Data: pNAL, Duration: duration}); err != nil {
+						log.Printf("Error writing sample: %v", err)
+						return
+					}
+					accumulatedBytes += len(pNAL)
+					if accumulatedBytes > 8192 {
+						time.Sleep(1 * time.Millisecond)
+						accumulatedBytes = 0
+					}
+				}
+				for i := range pendingNALs {
+					pendingNALs[i] = nil
+				}
+				pendingNALs = pendingNALs[:0]
 			}
 		}
 	}
