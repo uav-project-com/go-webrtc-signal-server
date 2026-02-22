@@ -11,7 +11,9 @@ until bluetoothctl show >/dev/null 2>&1; do \
 done; \
 bluetoothctl power on; \
 bluetoothctl discoverable on; \
-bluetoothctl pairable on'
+bluetoothctl pairable on; \
+python3 /home/assmin/auto_agent.py & \
+sdptool add SP'
 
 RemainAfterExit=yes
 

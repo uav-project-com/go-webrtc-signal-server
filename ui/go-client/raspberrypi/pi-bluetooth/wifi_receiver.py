@@ -80,8 +80,8 @@ def run_server():
 
     # Try to bind to "any" address first
     try:
-        log("Binding to 00:00:00:00:00:00 port 1...")
-        server_sock.bind(("00:00:00:00:00:00", 1)) # BDADDR_ANY
+        log("Binding to 00:00:00:00:00:00 port 2...")
+        server_sock.bind(("00:00:00:00:00:00", 2)) # BDADDR_ANY
     except Exception as e:
         log(f"Bind to ANY failed: {e}. Trying to find hci0 address...")
         try:
@@ -99,8 +99,8 @@ def run_server():
                         break
 
             if mac:
-                log(f"Binding to {mac} port 1...")
-                server_sock.bind((mac, 1))
+                log(f"Binding to {mac} port 2...")
+                server_sock.bind((mac, 2))
             else:
                 log("Could not find hci0 MAC address.")
                 raise e
@@ -111,7 +111,7 @@ def run_server():
     server_sock.listen(1)
 
     while True:
-        log("Waiting for incoming connection on RFCOMM channel 1...")
+        log("Waiting for incoming connection on RFCOMM channel 2...")
         try:
             client_sock, address = server_sock.accept()
             log(f"Accepted connection from {address}")

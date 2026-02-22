@@ -9,7 +9,7 @@ sudo rfcomm release 0 2>/dev/null
 
 echo "Connecting to Pi via Bluetooth..."
 
-sudo rfcomm connect 0 $PI_MAC &
+sudo rfcomm connect 0 $PI_MAC 2 &
 RFCOMM_PID=$!
 
 # ----- Wait RFCOMM -----
@@ -20,6 +20,16 @@ done
 
 if [ ! -e "$RFCOMM_DEV" ]; then
     echo "RFCOMM device not found"
+    
+    # Check if this might be a permission error due to a bad pairing cache
+    echo "This might be due to a cached profile missing the Serial Port Profile (SPP)."
+    echo -n "Would you like to remove the cached pairing for $PI_MAC now? (y/N): "
+    read -r REMOVE_ANS < /dev/tty
+    if [[ "$REMOVE_ANS" =~ ^[Yy]$ ]]; then
+        echo "Removing device $PI_MAC..."
+        bluetoothctl remove "$PI_MAC"
+        echo "Device removed. Please re-pair your laptop with the Raspberry Pi, then run this script again."
+    fi
     exit 1
 fi
 

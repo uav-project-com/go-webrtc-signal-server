@@ -37,11 +37,11 @@ RUN:
 
 ```bash
 sudo systemctl status bt-auto-enable
-sudo systemctl status rfcomm-server
 sudo systemctl status wifi_bt
 ps aux | grep bluetoothd
-ps aux | grep rfcomm
+# will appeared when connected:
 ls /dev/rfcomm0
+# checking log of python script:
 cd && cat log.log
 
 assmin@raspberrypi:~ $ bluetoothctl show
