@@ -1,7 +1,7 @@
-import {Component} from '@angular/core';
-import {Router} from '@angular/router';
-import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {environment} from '../../environments/environment';
+import { Component } from '@angular/core';
+import { Router } from '@angular/router';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { environment } from '../../environments/environment';
 
 // Danh sách 20 tên lowercase
 const names: string[] = [
@@ -53,6 +53,10 @@ export class HomeComponent {
     if (!this.sid) {
       this.getRandomName()
     }
-    this.router.navigate(['/webrtc-v2', this.roomId, this.sid, this.isMaster]).then(_ => {})
+    this.router.navigate(['/webrtc-v2', this.roomId, this.sid, this.isMaster]).then(_ => { })
+  }
+
+  goToUav() {
+    this.router.navigate(['/call-uav']).then(_ => { })
   }
 }

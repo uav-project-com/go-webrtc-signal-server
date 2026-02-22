@@ -4,12 +4,19 @@ import { FormsModule } from '@angular/forms';
 import { HomeComponent } from '../home/home.component';
 import { DataChannelService, VideoChannelService, VideoElementUtil, } from 'webrtc-common';
 import { environment } from '../../environments/environment';
+import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzIconModule, NzIconService } from 'ng-zorro-antd/icon';
+import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
+import { ReloadOutline, PoweroffOutline, MoreOutline } from '@ant-design/icons-angular/icons';
 
 @Component({
   selector: 'app-call',
   templateUrl: './call-uav.component.html',
   imports: [
     FormsModule,
+    NzButtonModule,
+    NzIconModule,
+    NzToolTipModule
   ],
   styleUrls: ['./call-uav.component.scss'],
   encapsulation: ViewEncapsulation.None
@@ -17,7 +24,9 @@ import { environment } from '../../environments/environment';
 export class CallUavComponent implements OnInit, AfterViewInit {
 
   // ----------------- Khởi tạo & Lifecycle -----------------
-  constructor(private readonly route: ActivatedRoute) { }
+  constructor(private readonly route: ActivatedRoute, private iconService: NzIconService) {
+    this.iconService.addIcon(ReloadOutline, PoweroffOutline, MoreOutline);
+  }
   @ViewChild('localVideo') localVideo!: ElementRef<HTMLVideoElement>;
   remoteUsers: string[] = ['user1', 'user2']; // dummy IDs
   isMinimized = false;
@@ -114,7 +123,7 @@ export class CallUavComponent implements OnInit, AfterViewInit {
     this.initDataChannel()
     this.chatOpen = !this.chatOpen;
   }
-  openMoreOptions() {}
+  openMoreOptions() { }
 
   /**
    * Chat example via data-channel

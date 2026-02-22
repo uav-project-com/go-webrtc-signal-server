@@ -20,20 +20,23 @@
     <!-- Overlay Controls (FPV Style) -->
     <div class="controls-overlay">
         <!-- Hidden toggle (auto-started), but kept for debug if needed, or we can remove it if fully auto -->
-        <button class="control-btn" (click)="toggleCamera()" style="opacity: 0.5;">
+        <button class="control-btn" (click)="toggleCamera()" style="display: none;">
             🎥 Toggle
         </button>
 
-        <button class="control-btn restart-btn" (click)="restart()">
-            🔄 Restart
+        <button nz-button nzType="primary" nzDanger nzShape="circle" nzSize="large" class="control-btn power-btn"
+            style="pointer-events: auto !important; z-index: 10;" (click)="powerOff()">
+            <nz-icon nzType="poweroff" />
         </button>
 
-        <button class="control-btn power-btn" (click)="powerOff()">
-            ⏻ Power Off
+        <button nz-button nzType="default" nzShape="circle" nzSize="large" class="control-btn restart-btn"
+            (click)="restart()">
+            <nz-icon nzType="reload" />
         </button>
 
-        <button class="control-btn menu-btn" (click)="openMoreOptions()">
-            ⋮
+        <button nz-button nzType="default" nzShape="circle" nzSize="large" class="control-btn menu-btn"
+            (click)="openMoreOptions()">
+            <nz-icon nzType="more" />
         </button>
 
         <!-- Hidden required buttons for VideoElementUtil -->
