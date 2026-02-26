@@ -1,7 +1,10 @@
 
-# Go REST API with PostgreSQL
+# Golang signal server and Pion client for Webrtc mutiple users call example or UAV application streaming.
+---
 
-This is a sample Go REST API project that demonstrates how to perform CRUD operations on a `Product` resource using the Gin framework and PostgreSQL. The project also includes middleware for logging the IP address of incoming requests.
+> Email: hieu19926@gmail.com
+
+---
 ## ❤️ Support this project
 
 If this project helps you, consider donating:
@@ -36,9 +39,17 @@ go-rest-api
 
 ## Features
 
-- Create, read, update, and delete products
-- Log IP addresses of incoming requests
+Golang now can call video 60fps with HD resolution.
+Features:
 
+1. direct stream video from rpicam-vid pipeline => H264 udp package => on air => laptop chrome => decode => show
+2. go client (stream only for UAV) and react-client (full meeting room supported with > 2 people)
+3. react client has nodeJs lib for easy init new client and UI-UX
+4. go client have some script for control/discovery pi5 wifi IP address via bluetooth (reuseable)
+
+**NOTE: client code location:** [./ui/](https://github.com/uav-project-com/go-webrtc-signal-server/tree/main/ui)
+
+**Document directory:** [./docs](https://github.com/uav-project-com/go-webrtc-signal-server/tree/main/docs)
 ## Getting Started
 
 ### Prerequisites
@@ -110,18 +121,6 @@ psql -h 172.29.96.1 -U postgres -d postgres
        DB_PORT=your_db_port
        ```
 
-4. Create the `products` table in your PostgreSQL database:
-
-   ```sql
-   CREATE TABLE products (
-       id SERIAL PRIMARY KEY,
-       name VARCHAR(255) NOT NULL,
-       price INTEGER NOT NULL,
-       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-   );
-   ```
-
 ### Running the Application
 
 1. Start the application:
@@ -131,58 +130,6 @@ psql -h 172.29.96.1 -U postgres -d postgres
    ```
 
 2. The server will start on `http://localhost:8080`.
-
-### API Endpoints
-
-- **GET /products**: Retrieve all products
-- **POST /products**: Create a new product
-  - Request body: `{ "name": "Sample Product", "price": 100 }`
-- **GET /products/:id**: Retrieve a product by ID
-- **PUT /products/:id**: Update a product by ID
-  - Request body: `{ "name": "Updated Product", "price": 150 }`
-- **DELETE /products/:id**: Delete a product by ID
-
-### Example CURL Commands
-
-- **Create a product:**
-
-  ```sh
-  curl -X POST http://localhost:8080/products \
-       -H "Content-Type: application/json" \
-       -d '{
-             "name": "Sample Product",
-             "price": 100
-           }'
-  ```
-
-- **Get all products:**
-
-  ```sh
-  curl http://localhost:8080/products
-  ```
-
-- **Get a product by ID:**
-
-  ```sh
-  curl http://localhost:8080/products/1
-  ```
-
-- **Update a product by ID:**
-
-  ```sh
-  curl -X PUT http://localhost:8080/products/1 \
-       -H "Content-Type: application/json" \
-       -d '{
-             "name": "Updated Product",
-             "price": 150
-           }'
-  ```
-
-- **Delete a product by ID:**
-
-  ```sh
-  curl -X DELETE http://localhost:8080/products/1
-  ```
 
 ### Middleware
 
