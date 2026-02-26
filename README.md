@@ -2,6 +2,17 @@
 # Go REST API with PostgreSQL
 
 This is a sample Go REST API project that demonstrates how to perform CRUD operations on a `Product` resource using the Gin framework and PostgreSQL. The project also includes middleware for logging the IP address of incoming requests.
+## ❤️ Support this project
+
+If this project helps you, consider donating:
+
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/hieu19926)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/hieu19926)
+
+[![USDT BEP20](https://img.shields.io/badge/USDT-BEP20-F3BA2F?logo=tether&logoColor=white)](#) 
+0xd49fF7624728e009501421F909F0421B02F1c7a3
+<img width="709" height="867" alt="image" src="https://github.com/user-attachments/assets/63523b34-6c53-4a71-9e31-dd98c44670fc" />
+
 
 ## Project Structure
 
