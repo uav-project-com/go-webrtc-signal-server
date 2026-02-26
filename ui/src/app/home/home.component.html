@@ -2,16 +2,11 @@
 <div class="home-container">
   <h1>Join a Room</h1>
   <label for="roomId">Current User name: {{ sid }}</label>
-  <input
-    id="roomId"
-    type="text"
-    [(ngModel)]="roomId"
-    placeholder="Enter or generate room ID"
-    class="room-input"
-  />
+  <input id="roomId" type="text" [(ngModel)]="roomId" placeholder="Enter or generate room ID" class="room-input" />
 
   <div class="buttons">
     <button (click)="generateRoom()">🔄 Generate Room</button>
     <button (click)="joinRoom()">🚪 Join</button>
+    <button (click)="goToUav()">Uav Control</button>
   </div>
 </div>

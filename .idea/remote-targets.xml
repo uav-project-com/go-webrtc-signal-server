@@ -15,6 +15,18 @@
           </config>
         </ContributedStateBase>
       </target>
+      <target name="assmin@192.168.1.15:22" type="ssh/sftp" uuid="054557d9-c8ef-4eac-82a0-1549e0b22fb4">
+        <config>
+          <option name="projectRootOnTarget" value="/home/assmin/go-webrtc-signal-server" />
+          <option name="serverName" value="assmin@192.168.1.15:22 password" />
+        </config>
+        <ContributedStateBase type="GoLanguageRuntime">
+          <config>
+            <option name="goPath" value="/usr/lib/go-1.19/" />
+            <option name="goRoot" value="/usr/lib/go-1.19/bin/go" />
+          </config>
+        </ContributedStateBase>
+      </target>
     </targets>
   </component>
 </project>

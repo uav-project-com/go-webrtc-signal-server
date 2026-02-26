@@ -33,3 +33,4 @@ docs/data-channel/.idea/inspectionProfiles/Project_Default.xml
 /ui/go-client/e2e/node_modules
 .idea/inspectionProfiles/Project_Default.xml
 ui/go-client/e2e/package-lock.json
+copilot.*

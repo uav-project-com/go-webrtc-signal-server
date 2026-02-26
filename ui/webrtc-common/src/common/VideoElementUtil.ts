@@ -28,15 +28,26 @@ export class VideoElementUtil {
         videoEl.id = 'video-' + userId
         videoEl.autoplay = true
         videoEl.playsInline = true
+        videoEl.muted = true; // Critical for Autoplay policy
+        videoEl.controls = false; // Disable default controls
         videoEl.className = 'dynamic-video'
 
         // Append video to tile, tile to container
         tileDiv.appendChild(videoEl)
         container.appendChild(tileDiv)
+
+        // Ensure tile is relative for absolute positioning of FPS meter
+        tileDiv.style.position = 'relative';
+
+        VideoElementUtil.attachFPSMeter(videoEl, tileDiv)
       }
     }
     if (videoEl) {
       videoEl.srcObject = stream
+      // Ensure FPS meter is attached/visible even if videoEl existed
+      if (videoEl.parentElement) {
+        VideoElementUtil.attachFPSMeter(videoEl, videoEl.parentElement)
+      }
     }
   }
 
@@ -109,20 +120,37 @@ export class VideoElementUtil {
     // insert video element khi có remote stream connected
     VideoElementUtil.videoChannelSvc.addOnRemoteStreamListener((stream: MediaStream, from: string) => {
       console.log(`Received new stream: ${from}`)
-      listRemoteStream[from] = stream;
-      const containerRemoteVideoElement =
-        document.getElementsByClassName(this.remoteVideoContainerClass)
-      if (containerRemoteVideoElement.length !== 1) {
-        console.warn(`Container class remote video not found or duplicated: ${this.remoteVideoContainerClass}`)
-      }
-      VideoElementUtil.addVideoElement(stream, from, '.' + this.remoteVideoContainerClass);
+      VideoElementUtil.handleRemoteStream(stream, from, listRemoteStream);
     });
+
+    // Process existing streams
+    const existingStreams = VideoElementUtil.videoChannelSvc.getRemoteStreams();
+    if (existingStreams) {
+      Object.keys(existingStreams).forEach(from => {
+        console.log(`Processing existing stream: ${from}`);
+        VideoElementUtil.handleRemoteStream(existingStreams[from], from, listRemoteStream);
+      });
+    }
+
     await VideoElementUtil.videoChannelSvc.addOnLocalStream((stream: MediaProvider) => {
       localVideo.srcObject = stream; // add local media to html element
+      if (localVideo.parentElement) {
+        VideoElementUtil.attachFPSMeter(localVideo, localVideo.parentElement)
+      }
     }, videoEnabled, audioEnabled)
     VideoElementUtil.addToggleMicEvent()
     VideoElementUtil.addHangUpEvent()
     this.ngAfterViewChecked(userIds, listRemoteStream)
+  }
+
+  private static handleRemoteStream(stream: MediaStream, from: string, listRemoteStream: { [userId: string]: MediaStream }) {
+    listRemoteStream[from] = stream;
+    const containerRemoteVideoElement =
+      document.getElementsByClassName(this.remoteVideoContainerClass)
+    if (containerRemoteVideoElement.length !== 1) {
+      console.warn(`Container class remote video not found or duplicated: ${this.remoteVideoContainerClass}`)
+    }
+    VideoElementUtil.addVideoElement(stream, from, '.' + this.remoteVideoContainerClass);
   }
 
   /**
@@ -138,6 +166,7 @@ export class VideoElementUtil {
         const videoEl = document.getElementById('video-' + user) as HTMLVideoElement;
         if (videoEl && listRemoteStream[user] && videoEl.srcObject !== listRemoteStream[user]) {
           videoEl.srcObject = listRemoteStream[user];
+          VideoElementUtil.attachFPSMeter(videoEl, videoEl.parentElement as HTMLElement)
         }
       });
     });
@@ -145,5 +174,64 @@ export class VideoElementUtil {
       childList: true,
       subtree: true
     });
+  }
+
+  /**
+   * Attach a simple FPS meter to the video element.
+   * This uses requestVideoFrameCallback if available for accurate presentation FPS.
+   */
+  private static attachFPSMeter(video: HTMLVideoElement, container: HTMLElement) {
+    if (!video || !container) return
+    if (container.querySelector('.fps-meter')) return // already attached
+
+    const fpsDiv = document.createElement('div')
+    fpsDiv.className = 'fps-meter'
+    fpsDiv.style.position = 'fixed'
+    fpsDiv.style.top = '10px'
+    fpsDiv.style.left = '10px'
+    fpsDiv.style.background = 'rgba(0, 0, 0, 0.7)'
+    fpsDiv.style.color = '#0f0' // Green text
+    fpsDiv.style.padding = '2px 5px'
+    fpsDiv.style.borderRadius = '4px'
+    fpsDiv.style.fontSize = '12px'
+    fpsDiv.style.fontFamily = 'monospace'
+    fpsDiv.style.zIndex = '2147483647' // Max z-index
+    fpsDiv.style.pointerEvents = 'none'
+    fpsDiv.innerText = 'FPS: --'
+
+    // Ensure container is relative so absolute positioning works
+    const style = window.getComputedStyle(container)
+    if (style.position === 'static') {
+      container.style.position = 'relative'
+    }
+
+    container.appendChild(fpsDiv)
+
+    let lastTime = performance.now()
+    let frameCount = 0
+
+    const onFrame = (now: number, metadata: any) => {
+      frameCount++
+      const elapsed = now - lastTime
+      if (elapsed >= 1000) {
+        const fps = Math.round((frameCount * 1000) / elapsed)
+        fpsDiv.innerText = `FPS: ${fps} (${video.videoWidth}x${video.videoHeight})`
+        frameCount = 0
+        lastTime = now
+      }
+
+      if ('requestVideoFrameCallback' in video) {
+        (video as any).requestVideoFrameCallback(onFrame)
+      } else {
+        // Fallback if not supported (less accurate but something)
+        requestAnimationFrame((t) => onFrame(t, null))
+      }
+    }
+
+    if ('requestVideoFrameCallback' in video) {
+      (video as any).requestVideoFrameCallback(onFrame)
+    } else {
+      requestAnimationFrame((t) => onFrame(t, null))
+    }
   }
 }

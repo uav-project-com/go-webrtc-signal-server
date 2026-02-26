@@ -1,0 +1,48 @@
+<div class="meeting-container uav-container">
+    <!-- Top Bar (Simplified/Hidden) -->
+    <!-- <div class="top-bar">
+    <button class="back-btn" (click)="goHome()" >←</button>
+    <div class="meeting-id">{{sid}} joined room: {{roomId}}</div>
+    <button class="speaker-btn">🔊</button>
+  </div> -->
+
+    <!-- Video Room -->
+    <div class="video-room">
+        <!-- Participant Grid - This is where remote videos appear via VideoElementUtil -->
+        <div class="participant-grid"></div>
+
+        <!-- Mini Self Video - HIDDEN for FPV viewer -->
+        <div class="self-video" style="display: none;">
+            <video #localVideo autoplay muted playsinline></video>
+        </div>
+    </div>
+
+    <!-- Overlay Controls (FPV Style) -->
+    <div class="controls-overlay">
+        <!-- Hidden toggle (auto-started), but kept for debug if needed, or we can remove it if fully auto -->
+        <button class="control-btn" (click)="toggleCamera()" style="display: none;">
+            🎥 Toggle
+        </button>
+
+        <button nz-button nzType="primary" nzDanger nzShape="circle" nzSize="large" class="control-btn power-btn"
+            style="pointer-events: auto !important; z-index: 10;" (click)="powerOff()">
+            <nz-icon nzType="poweroff" />
+        </button>
+
+        <button nz-button nzType="default" nzShape="circle" nzSize="large" class="control-btn restart-btn"
+            (click)="restart()">
+            <nz-icon nzType="reload" />
+        </button>
+
+        <button nz-button nzType="default" nzShape="circle" nzSize="large" class="control-btn menu-btn"
+            (click)="openMoreOptions()">
+            <nz-icon nzType="more" />
+        </button>
+
+        <!-- Hidden required buttons for VideoElementUtil -->
+        <div style="display: none;">
+            <button class="toggle-mic-btn"></button>
+            <button class="hangup"></button>
+        </div>
+    </div>
+</div>

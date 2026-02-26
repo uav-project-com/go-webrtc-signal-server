@@ -1,14 +1,16 @@
 package webrtc
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 )
 
 // CameraSettings lưu trữ trạng thái hiện tại của camera
@@ -22,17 +24,16 @@ type CameraSettings struct {
 	Zoom     float64 `json:"zoom"`  // 1.0 - 10.0
 }
 
-// PiCameraManager quản lý tiến trình libcamera-vid và các lệnh điều khiển phần cứng cho Raspberry Pi
+// PiCameraManager quản lý tiến trình GStreamer (thay thế libcamera-vid)
 type PiCameraManager struct {
 	mu       sync.Mutex
 	cmd      *exec.Cmd
 	stdout   io.ReadCloser
 	settings CameraSettings
 
-	// Pipe is no longer used for main video data, but kept for struct compatibility if needed,
-	// or we can just remove them if not used elsewhere.
-	// We'll prioritize udpReader.
+	// udpReader reads the RTP stream from the local UDP socket
 	udpReader *UDPReader
+	exitChan  chan error
 }
 
 // Check if PiCameraManager implements ICameraManager
@@ -58,13 +59,29 @@ func GetCameraManager() ICameraManager {
 			return
 		}
 
-		log.Println("Using PiCameraManager (libcamera)")
+		if os.Getenv("RPICAM") == "true" {
+			log.Println("Using PiCameraManagerRpi (rpicam-vid)")
+			instance = &PiCameraManagerRpi{
+				settings: CameraSettings{
+					CameraID: 0,
+					Width:    1280,
+					Height:   720,
+					FPS:      60,
+					Focus:    500,
+					ISO:      100,
+					Zoom:     1.0,
+				},
+			}
+			return
+		}
+
+		log.Println("Using PiCameraManager (GStreamer)")
 		instance = &PiCameraManager{
 			settings: CameraSettings{
 				CameraID: 0,
 				Width:    1280,
 				Height:   720,
-				FPS:      30,
+				FPS:      30, // GStreamer usually drops heavily at 60fps
 				Focus:    500,
 				ISO:      100,
 				Zoom:     1.0,
@@ -98,50 +115,116 @@ func (m *PiCameraManager) Start() error {
 		return fmt.Errorf("failed to open UDP port 5600: %v", err)
 	}
 
+	// Kill any existing gstreamer processes (optional but safer)
+	log.Println("Camera Manager: Force cleaning any existing gst-launch processes...")
+	_ = exec.Command("pkill", "-f", "gst-launch-1.0").Run()
+
+	// Smart wait: Poll pgrep until process is gone (max 2s)
+	for i := 0; i < 20; i++ {
+		if err := exec.Command("pgrep", "-f", "gst-launch-1.0").Run(); err != nil {
+			// pgrep returns exit code 1 if no process found -> Success!
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	return m.startProcess()
 }
 
 func (m *PiCameraManager) startProcess() error {
-	// Xây dựng tham số cho libcamera-vid
+	cameraName := m.getCameraName(m.settings.CameraID)
+	log.Printf("PiCameraManager: Selected Camera '%s' (Index %d)", cameraName, m.settings.CameraID)
+
+	// Xây dựng tham số cho gst-launch-1.0
+	// libcamerasrc -> videoconvert -> x264enc -> rtph264pay -> udpsink
 	args := []string{
-		"-t", "0",
-		"--inline",
-		"--width", strconv.Itoa(m.settings.Width),
-		"--height", strconv.Itoa(m.settings.Height),
-		"--framerate", strconv.Itoa(m.settings.FPS),
-		"--codec", "h264",
-		"--camera", strconv.Itoa(m.settings.CameraID),
-		// Output to UDP localhost port 5600
-		"-o", "udp://127.0.0.1:5600",
+		"-q",
+		"libcamerasrc",
 	}
 
-	// Thêm zoom (ROI) nếu có
-	if m.settings.Zoom > 1.0 {
-		roi := 1.0 / m.settings.Zoom
-		offset := (1.0 - roi) / 2.0
-		args = append(args, "--roi", fmt.Sprintf("%f,%f,%f,%f", offset, offset, roi, roi))
+	if cameraName != "" {
+		args = append(args, "camera-name="+cameraName)
 	}
 
-	m.cmd = exec.Command("libcamera-vid", args...)
+	args = append(args,
+		"!", fmt.Sprintf("video/x-raw,format=NV12,width=%d,height=%d,framerate=%d/1", m.settings.Width, m.settings.Height, m.settings.FPS),
+		"!", "videoconvert",
+		// x264enc configuration for low latency
+		"!", "x264enc", "bitrate=2000", "speed-preset=ultrafast", "tune=zerolatency", "key-int-max=30", "bframes=0",
+		// RTP Packetization
+		"!", "rtph264pay", "config-interval=1", "pt=96", "mtu=1200",
+		// Output to localhost UDP
+		"!", "udpsink", "host=127.0.0.1", "port=5600",
+	)
 
-	// We don't need to read stdout since we are using UDP
-	// But we might want to capture stderr for logs
+	m.cmd = exec.Command("gst-launch-1.0", args...)
 	m.cmd.Stderr = os.Stderr
 
+	// Create a new process group to kill all children later
+	m.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
 	if err := m.cmd.Start(); err != nil {
-		return err
+		return convertGstError(err)
 	}
 
-	log.Printf("Camera Manager: Đã khởi động Camera %d (UDP Mode)", m.settings.CameraID)
+	log.Printf("Camera Manager: GStreamer PID: %d", m.cmd.Process.Pid)
+	log.Printf("Camera Manager: Started GStreamer pipeline for Camera %d (RTP Mode)", m.settings.CameraID)
+
+	// Monitor exit
+	m.exitChan = make(chan error, 1)
+	go func() {
+		state, err := m.cmd.Process.Wait()
+		if err != nil {
+			log.Printf("Camera Manager: Process.Wait() return error: %v", err)
+			m.exitChan <- err
+		} else {
+			log.Printf("Camera Manager: Process exited. Success: %v, Code: %d", state.Success(), state.ExitCode())
+			m.exitChan <- nil
+		}
+	}()
 	return nil
 }
 
-// Restart khởi động lại tiến trình (dùng khi lag hoặc đổi mắt cam/zoom)
+func convertGstError(err error) error {
+	if strings.Contains(err.Error(), "file not found") {
+		return fmt.Errorf("gstreamer not found. Please install: sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-bad gstreamer1.0-libcamera")
+	}
+	return err
+}
+
+// getCameraName tìm tên camera dựa trên index bằng cách gọi libcamera-hello --list-cameras
+func (m *PiCameraManager) getCameraName(index int) string {
+	// Output format example:
+	// 0 : imx219 [1280x720] (/base/axi/pcie@120000/rp1/i2c@88000/imx219@10)
+
+	cmd := exec.Command("libcamera-hello", "--list-cameras")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Failed to list cameras: %v", err)
+		return ""
+	}
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, fmt.Sprintf("%d :", index)) {
+			// Extract the value inside the last set of parentheses
+			start := strings.LastIndex(line, "(")
+			end := strings.LastIndex(line, ")")
+			if start != -1 && end != -1 && end > start {
+				return line[start+1 : end]
+			}
+		}
+	}
+	return ""
+}
+
+// Restart khởi động lại tiến trình
 func (m *PiCameraManager) Restart() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	log.Println("Camera Manager: Đang khởi động lại tiến trình...")
+	log.Println("Camera Manager: Restarting...")
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
 		_ = m.cmd.Wait()
@@ -150,23 +233,21 @@ func (m *PiCameraManager) Restart() error {
 	return m.startProcess()
 }
 
-// SetFocus điều khiển lấy nét qua v4l2-ctl (không cần restart)
+// SetFocus
 func (m *PiCameraManager) SetFocus(val int) {
 	m.settings.Focus = val
-	// Lưu ý: /dev/v4l-subdevX có thể thay đổi tùy hệ thống, thường là subdev0 hoặc 1 cho camera
-	// Ở đây dùng lệnh shell để tìm và set cho nhanh hoặc mặc định subdev của Pi
-	go exec.Command("v4l2-ctl", "-d", "/dev/v4l-subdev0", "--set-ctrl", fmt.Sprintf("focus_absolute=%d", val)).Run()
+	// GStreamer libcamerasrc might support 'controls' property but it's complicated to set periodically.
+	// We can still try v4l2-ctl if the device node is exposed, but often libcamera locks it.
+	log.Printf("SetFocus %d not fully supported in GStreamer mode yet (requires GstElement control)", val)
 }
 
-// SetISO điều khiển độ nhạy sáng (Gain)
+// SetISO
 func (m *PiCameraManager) SetISO(val int) {
 	m.settings.ISO = val
-	// Có thể dùng v4l2-ctl hoặc phải restart libcamera-vid tùy driver
-	// Ở đây giả định cần restart để áp dụng chính xác cho libcamera
 	m.Restart()
 }
 
-// SwitchCamera chuyển đổi giữa các mắt camera
+// SwitchCamera
 func (m *PiCameraManager) SwitchCamera(id int) {
 	if m.settings.CameraID == id {
 		return
@@ -175,16 +256,16 @@ func (m *PiCameraManager) SwitchCamera(id int) {
 	m.Restart()
 }
 
-// SetZoom điều khiển Zoom kỹ thuật số (ROI)
+// SetZoom
 func (m *PiCameraManager) SetZoom(val float64) {
 	if val < 1.0 {
 		val = 1.0
 	}
 	m.settings.Zoom = val
-	m.Restart()
+	log.Printf("SetZoom %f not supported in GStreamer mode yet", val)
 }
 
-// GetReader trả về pipe để đọc dữ liệu H264
+// GetReader trả về pipe để đọc dữ liệu RTP
 func (m *PiCameraManager) GetReader() io.Reader {
 	return m.udpReader
 }
@@ -199,54 +280,48 @@ func (m *PiCameraManager) Stop() {
 		m.udpReader = nil
 	}
 
+	var pid int
 	if m.cmd != nil && m.cmd.Process != nil {
-		_ = m.cmd.Process.Kill()
+		pid = m.cmd.Process.Pid
+		// Attempt graceful shutdown with SIGTERM
+		_ = syscall.Kill(-pid, syscall.SIGTERM)
+
+		// Wait for exit or timeout
+		select {
+		case err := <-m.exitChan:
+			log.Printf("Process exited gracefully: %v", err)
+		case <-time.After(2000 * time.Millisecond):
+			// Timeout, force kill
+			log.Printf("Camera Manager: SIGTERM timeout, forcing SIGKILL")
+			_ = syscall.Kill(-pid, syscall.SIGKILL)
+
+			// Wait again with short timeout to ensure reaping
+			select {
+			case err := <-m.exitChan:
+				log.Printf("Process killed: %v", err)
+			case <-time.After(1000 * time.Millisecond):
+				log.Println("Camera Manager: Process unresponsive to SIGKILL (Zombie?), abandoning.")
+			}
+		}
+	} else {
+		log.Println("Camera Manager: Stop() called but cmd/Process is nil. Nothing to stop.")
 	}
 	m.cmd = nil
+	// Smart wait: Verify process is truly gone from OS process table
+	if pid > 0 {
+		for i := 0; i < 20; i++ {
+			// Sending signal 0 checks if process exists
+			if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+				// ESRCH = No such process. Success!
+				log.Printf("Camera Manager: Process %d confirmed gone.", pid)
+				break
+			}
+			time.Sleep(10 * time.Millisecond) // Poll fast
+		}
+	}
 }
 
 func (m *PiCameraManager) IsRTP() bool {
-	// Although we use UDP, we are sending raw H264 via UDP (likely), or is libcamera-vid sending RTP?
-	// libcamera-vid -o udp://... sends raw bitstream over UDP by default unless --libav-format is specified?
-	// Actually, typically raw H264 over UDP is not RTP.
-	// But LaptopCameraManager sends RTP.
-	// Wait, LaptopCameraManager sends RTP because of `rtph264pay`.
-	// If we want Pi to behave EXACTLY like LaptopManager (RTP), we need to check if libcamera-vid supports RTP output or if we need to wrap it.
-	// However, the `video_channel.go` has conditional logic:
-	// if camManager.IsRTP() { ... } else { ... }
-	// LaptopManager.IsRTP() returns true.
-	// If we set PiManager.IsRTP() to true, `video_channel.go` will use the RTP path which expects RTP packets.
-	// libcamera-vid output to udp is usually raw stream (annex B).
-	// If we want to use the RTP path in video_channel, we need `libcamera-vid` to output RTP.
-	// `libcamera-vid` usually does not output RTP directly without gstreamer or ffmpeg.
-	// BUT, the user said "apply results of laptop ... to pi".
-	// The `LaptopCameraManager` uses `NewUDPReader` which is just a UDP socket wrapper.
-	// The `video_channel.go` decides how to read it.
-	//
-	// If `IsRTP()` returns false (default for Pi currently):
-	// It uses `NewH264Reader(camManager.GetReader())` which expects raw H264 stream.
-	// And it parses NALs.
-	//
-	// If we switch Pi to use UDPReader, `GetReader()` returns a `UDPReader`.
-	// `UDPReader` implements `io.Reader`.
-	// So `NewH264Reader` will read from `UDPReader`.
-	// This works for RAW H264 over UDP.
-	//
-	// Laptop uses `rtph264pay` so it sends RTP packets. `IsRTP()` returns true.
-	// `video_channel.go` reads from `UDPReader` and writes directly to `rtpTrack`.
-	//
-	// If we want Pi to be consistent with "Laptop logic" regarding UDPReader:
-	// We just want the NON-BLOCKING reading.
-	// We do NOT necessarily need RTP if the H264 parsing logic works.
-	// The User said "apply result of laptop camera ... to pi ... review ... if anything needs update to run like laptop".
-	// The main "result" from previous turn was fixing the BLOCKING/BUFFER issue.
-	// Using UDPReader achieves that.
-	//
-	// So, we keep IsRTP() false, because we are likely sending raw H264 from libcamera-vid, not RTP packets.
-	// Unless the user wants us to change libcamera to output RTP?
-	// "libcamera-vid --inline -o udp://..." streams raw h264.
-	// So `IsRTP()` should remain `false`.
-	// `video_channel.go` will read raw H264 from the UDP socket via `UDPReader`.
-	// This mirrors the structure but keeps the data format native to Pi's simple usage.
-	return false
+	// GStreamer output with rtph264pay IS RTP.
+	return true
 }

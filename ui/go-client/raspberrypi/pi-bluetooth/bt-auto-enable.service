@@ -1,0 +1,21 @@
+[Unit]
+Description=Auto enable Bluetooth discoverable & pairable
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c '\
+until bluetoothctl show >/dev/null 2>&1; do \
+  sleep 1; \
+done; \
+bluetoothctl power on; \
+bluetoothctl discoverable on; \
+bluetoothctl pairable on; \
+python3 /home/assmin/auto_agent.py & \
+sdptool add SP'
+
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
